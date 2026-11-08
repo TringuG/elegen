@@ -1,0 +1,6 @@
+{
+  "name": "Elektro Schema Generator",
+  "description": "Profesionálny generátor jednopólových a viacpólových elektrických schém domových a komerčných rozvádzačov podľa STN EN IEC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
