@@ -245,7 +245,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
       )}
 
       {/* 2. Sub-Navigation Tabs */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-2 shadow-sm flex flex-wrap gap-1.5 no-print">
+      <div className="bg-white rounded-2xl border border-slate-200 p-2 shadow-sm flex overflow-x-auto no-scrollbar gap-1.5 no-print">
         {[
           {
             id: 'nameplate' as const,
@@ -285,7 +285,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 min-w-[200px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 min-w-[190px] sm:min-w-[210px] shrink-0 flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                 active
                   ? 'bg-[#0066FF] text-white shadow-sm'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -611,7 +611,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
 
               {/* INDUSTRIAL NAMEPLATE CARD (HIGH-FIDELITY VECTOR STYLE) */}
               <div
-                className={`bg-white text-slate-950 border-4 border-slate-950 rounded-lg p-5 font-sans shadow-lg relative print:shadow-none mx-auto ${
+                className={`w-full bg-white text-slate-950 border-4 border-slate-950 rounded-lg p-3.5 sm:p-5 font-sans shadow-lg relative print:shadow-none mx-auto ${
                   labelSize === 'compact'
                     ? 'max-w-[340px] text-[10px]'
                     : labelSize === 'large'
@@ -851,7 +851,8 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                 Rozsah a výsledky kusovej overovacej skúšky (STN EN 61439-1 čl. 11.2 až 11.10)
               </h3>
 
-              <table className="w-full text-left border-collapse border border-slate-300 text-xs">
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+                <table className="w-full min-w-[620px] text-left border-collapse border border-slate-300 text-xs">
                 <thead>
                   <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-300">
                     <th className="p-2 border-r border-slate-300 w-12 text-center">Článok</th>
@@ -1035,6 +1036,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                 </tbody>
               </table>
             </div>
+          </div>
 
             {/* Overall Verdict Banner */}
             <div className="p-4 bg-emerald-50 border-2 border-emerald-600 rounded-xl flex flex-wrap items-center justify-between gap-4">
@@ -1346,7 +1348,8 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                 Rozpis stratových tepelných výkonov podľa kategórií prístrojov:
               </h4>
 
-              <table className="w-full text-left border-collapse border border-slate-300 text-xs font-mono">
+              <div className="overflow-x-auto -mx-2 sm:mx-0">
+                <table className="w-full min-w-[550px] text-left border-collapse border border-slate-300 text-xs font-mono">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 font-sans font-bold border-b border-slate-300">
                     <th className="p-2 border-r border-slate-300">Kategória komponentu</th>
@@ -1389,6 +1392,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                 </tbody>
               </table>
             </div>
+          </div>
 
             {/* Normative Assessment Summary */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">

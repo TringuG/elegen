@@ -401,92 +401,93 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
     <div className="schema-canvas-root flex flex-col h-full bg-[#0B1120] print:bg-white rounded-xl border border-slate-800 print:border-0 overflow-hidden print:overflow-visible">
       {/* Top Canvas Toolbar — Hidden in print and in compactMode */}
       {!compactMode && (
-        <div className="no-print print:hidden flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0F172A] border-b border-slate-800">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="no-print print:hidden flex items-center justify-between gap-2 px-3 sm:px-4 py-2 bg-[#0F172A] border-b border-slate-800 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 shrink-0">
             {/* 1L / 3L / Wiring Diagram Toggle */}
-            <div className="inline-flex rounded-xl bg-[#0B1120] p-1 border border-slate-800">
+            <div className="inline-flex rounded-xl bg-[#0B1120] p-1 border border-slate-800 shrink-0">
               <button
                 type="button"
                 onClick={() => onDisplayModeChange('single-line')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   displayMode === 'single-line'
                     ? 'bg-[#0066FF] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <GitCommit className="w-3.5 h-3.5" />
-                Jednopólová (1L)
+                <GitCommit className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Jednopólová</span> (1L)
               </button>
               <button
                 type="button"
                 onClick={() => onDisplayModeChange('multi-line')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   displayMode === 'multi-line'
                     ? 'bg-[#0066FF] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5" />
-                Viacpólová (3L)
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Viacpólová</span> (3L)
               </button>
               <button
                 type="button"
                 onClick={() => onDisplayModeChange('wiring-diagram')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                   displayMode === 'wiring-diagram'
                     ? 'bg-[#0066FF] text-white shadow-sm'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <Cable className="w-3.5 h-3.5" />
-                Detailné zapojenie (Vodiče)
+                <Cable className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">Detailné zapojenie</span>
+                <span className="md:hidden">Vodiče</span>
               </button>
             </div>
 
             {onProjectChange && (
-              <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
+              <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800 shrink-0">
                 <button
                   type="button"
                   onClick={handleAddQuickCircuit}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title="Pridať nový vývodový okruh priamo do schémy"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
-                  + Okruh (FA)
+                  <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+                  <span>+ Okruh</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleAddQuickRcd}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title="Pridať prúdový chránič priamo do schémy"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
-                  + Chránič (FI)
+                  <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+                  <span>+ Chránič</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleAutoAlignAndRoute}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0066FF]/20 hover:bg-[#0066FF]/30 text-[#38BDF8] border border-[#0066FF]/40 text-xs font-bold transition-colors cursor-pointer"
+                  className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0066FF]/20 hover:bg-[#0066FF]/30 text-[#38BDF8] border border-[#0066FF]/40 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title="Automaticky zarovnať stĺpce, prepojiť zbernice a prečíslovať FA1..FAn"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Auto-zarovnať &amp; spojiť
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                  <span>Auto-zarovnať</span>
                 </button>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <div className="flex items-center bg-[#0B1120] rounded-lg border border-slate-800 p-0.5">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center bg-[#0B1120] rounded-lg border border-slate-800 p-0.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setZoom((z) => Math.max(0.45, +(z - 0.15).toFixed(2)))}
                 className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
                 title="Oddialiť"
               >
-                <ZoomOut className="w-4 h-4" />
+                <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
-              <span className="px-2 text-xs font-mono text-slate-300 tabular-nums">
+              <span className="px-1.5 sm:px-2 text-xs font-mono text-slate-300 tabular-nums">
                 {Math.round(zoom * 100)}%
               </span>
               <button
@@ -495,7 +496,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
                 title="Priblížiť"
               >
-                <ZoomIn className="w-4 h-4" />
+                <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
               <button
                 type="button"
@@ -513,41 +514,42 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleExportSvg}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
               title="Stiahnuť čisto schému ako vektorový súbor SVG"
             >
               <Download className="w-3.5 h-3.5 text-[#38BDF8]" />
-              SVG
+              <span>SVG</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportPng}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              className="hidden xs:flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
               title="Stiahnuť čisto schému + rozpis ističov ako obrázok PNG"
             >
               <Download className="w-3.5 h-3.5 text-emerald-400" />
-              PNG
+              <span>PNG</span>
             </button>
 
             <button
               type="button"
               onClick={handleExportPdf}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer whitespace-nowrap shrink-0"
               title="Stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
             >
               <Download className="w-3.5 h-3.5" />
-              Export PDF (Schéma + Ističe)
+              <span className="hidden sm:inline">Export PDF (Schéma + Ističe)</span>
+              <span className="sm:hidden">PDF</span>
             </button>
 
             <button
               type="button"
               onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
               title="Vytlačiť na tlačiarni"
             >
               <Printer className="w-3.5 h-3.5 text-slate-300" />
-              Tlač
+              <span>Tlač</span>
             </button>
           </div>
         </div>

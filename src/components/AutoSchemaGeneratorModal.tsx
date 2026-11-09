@@ -169,22 +169,22 @@ export const AutoSchemaGeneratorModal: React.FC<Props> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="bg-[#0B1120] text-white p-6 border-b border-slate-800 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-[#0066FF] flex items-center justify-center text-white shadow-lg shadow-[#0066FF]/40">
-              <Sparkles className="w-6 h-6" />
+        <div className="bg-[#0B1120] text-white p-4 sm:p-6 border-b border-slate-800 flex items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#0066FF] flex items-center justify-center text-white shadow-lg shadow-[#0066FF]/40 shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-extrabold text-white">
-                  Automatické vytvorenie elektrickej schémy
+                <h2 className="text-sm sm:text-lg font-extrabold text-white truncate">
+                  Automatické vytvorenie schémy
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold shrink-0">
                   1-KLIKOM
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Okamžite vygeneruje kompletnú schému rozvádzača s fázovým vyvážením, prístrojmi a kabelážou podľa STN.
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 hidden xs:block truncate">
+                Okamžite vygeneruje kompletnú schému rozvádzača s fázovým vyvážením podľa STN.
               </p>
             </div>
           </div>
@@ -192,22 +192,22 @@ export const AutoSchemaGeneratorModal: React.FC<Props> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Mode Selector Toggle */}
-        <div className="px-6 pt-4 pb-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+        <div className="px-4 sm:px-6 pt-3 sm:pt-4 pb-2 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="text-xs font-bold text-slate-600 uppercase tracking-wider">
             Vyberte spôsob vytvorenia:
           </div>
-          <div className="inline-flex rounded-xl bg-slate-200 p-1 text-xs">
+          <div className="inline-flex rounded-xl bg-slate-200 p-1 text-xs w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setCustomizerMode(false)}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                 !customizerMode
                   ? 'bg-[#0066FF] text-white shadow-sm'
                   : 'text-slate-700 hover:text-slate-900'
@@ -218,19 +218,19 @@ export const AutoSchemaGeneratorModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setCustomizerMode(true)}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer whitespace-nowrap text-center ${
                 customizerMode
                   ? 'bg-[#0066FF] text-white shadow-sm'
                   : 'text-slate-700 hover:text-slate-900'
               }`}
             >
-              Rýchly sprievodca na mieru
+              Sprievodca na mieru
             </button>
           </div>
         </div>
 
         {/* Body Content */}
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
           {!customizerMode ? (
             <div className="space-y-3">
               <div className="text-xs text-slate-500 font-medium">

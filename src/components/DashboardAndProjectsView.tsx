@@ -218,11 +218,11 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
           </div>
 
           {/* Primary CTA Buttons */}
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 shrink-0 w-full xl:w-auto">
             <button
               type="button"
               onClick={() => onNavigate('smart-designer')}
-              className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-sm font-bold shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs sm:text-sm font-bold shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer whitespace-nowrap"
             >
               <Sparkles className="w-4 h-4" />
               <span>Upraviť rozvádzač (Kroky 1–6)</span>
@@ -231,7 +231,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             <button
               type="button"
               onClick={() => onNavigate('schema-editor')}
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-sm font-bold transition-all cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
             >
               <Cpu className="w-4 h-4 text-[#38BDF8]" />
               <span>Editor schémy</span>
@@ -240,7 +240,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             <button
               type="button"
               onClick={() => onNavigate('manufacturing')}
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-sm font-bold transition-all cursor-pointer"
+              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
               title="Generovať výrobný štítok, protokol kusovej skúšky a CE vyhlásenie o zhode"
             >
               <Award className="w-4 h-4 text-amber-400" />
@@ -250,7 +250,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             <button
               type="button"
               onClick={() => onNavigate('documentation')}
-              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-sm font-bold transition-all cursor-pointer"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               <span>Kusovník a PDF</span>
@@ -558,7 +558,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
 
                     {/* Action Buttons */}
                     <div
-                      className="flex items-center gap-1.5 shrink-0"
+                      className="flex flex-wrap items-center gap-1.5 shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button

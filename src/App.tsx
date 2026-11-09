@@ -50,6 +50,8 @@ import {
   FileCode2,
   Download,
   Award,
+  Menu,
+  X,
 } from 'lucide-react';
 
 const STORAGE_KEY_PROJECTS = 'elektro_schema_pro_saved_projects_v3';
@@ -58,6 +60,7 @@ const STORAGE_KEY_ACTIVE_ID = 'elektro_schema_pro_active_id_v3';
 const PRIMARY_NAV_ITEMS: {
   id: NavigationSection;
   label: string;
+  shortLabel?: string;
   subtitle: string;
   icon: React.ComponentType<{ className?: string }>;
 }[] = [
@@ -94,6 +97,7 @@ const PRIMARY_NAV_ITEMS: {
   {
     id: 'documentation',
     label: 'Dokumentácia a export',
+    shortLabel: 'Dokumentácia & PDF',
     subtitle: 'Výkaz materiálu, sprievodná správa a PDF',
     icon: FileSpreadsheet,
   },
@@ -182,6 +186,7 @@ export function App() {
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [confirmResetModal, setConfirmResetModal] = useState<boolean>(false);
   const [autoSchemaModalOpen, setAutoSchemaModalOpen] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   // Sync activeProject into savedProjects & localStorage
   useEffect(() => {
@@ -384,29 +389,27 @@ export function App() {
     <div className="min-h-screen flex flex-col bg-[#F1F5F9] text-slate-900 selection:bg-[#0066FF] selection:text-white">
       {/* TOP STRUCTURAL HEADER — DEEP NAVY / ANTHRACITE (#0B1120) */}
       <header className="no-print sticky top-0 z-40 bg-[#0B1120] border-b border-slate-800/90 text-white shadow-md">
-        <div className="max-w-[1920px] mx-auto px-4 lg:px-6 min-h-16 py-2 flex items-center justify-between gap-4">
+        <div className="max-w-[1920px] mx-auto px-3 sm:px-4 lg:px-6 min-h-14 sm:min-h-16 py-2 flex items-center justify-between gap-2 sm:gap-4">
           {/* Brand Logo & System Identity */}
-          <div className="flex items-center gap-3.5 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
             <button
               type="button"
               onClick={() => setActiveSection('dashboard')}
-              className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer shrink-0"
+              className="flex items-center gap-2 sm:gap-2.5 text-left group focus:outline-none cursor-pointer shrink-0"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#0066FF] to-[#0EA5E9] flex items-center justify-center shadow-lg shadow-[#0066FF]/30 group-hover:scale-105 transition-transform shrink-0">
-                <Zap className="w-5 h-5 text-white fill-white/20" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[#0066FF] to-[#0EA5E9] flex items-center justify-center shadow-lg shadow-[#0066FF]/30 group-hover:scale-105 transition-transform shrink-0">
+                <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-white fill-white/20" />
               </div>
-              <div>
-                <div className="flex items-center gap-2 whitespace-nowrap">
-                  <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
-                    ELEKTRO SCHEMA GENERATOR
-                  </span>
-                  <span className="px-1.5 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider bg-[#0066FF] text-white rounded">
-                    PRO
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 font-medium hidden sm:block whitespace-nowrap">
-                  Projektovanie elektrických rozvádzačov • STN EN 61439 &amp; STN 33 2000
-                </p>
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className="text-xs sm:text-base font-extrabold tracking-tight text-white">
+                  ELEKTRO SCHEMA
+                </span>
+                <span className="hidden lg:inline text-xs sm:text-base font-extrabold tracking-tight text-white">
+                  GENERATOR
+                </span>
+                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-wider bg-[#0066FF] text-white rounded">
+                  PRO
+                </span>
               </div>
             </button>
 
@@ -435,7 +438,7 @@ export function App() {
           </div>
 
           {/* Right Engineering Telemetry & Quick Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Live STN Validation Pill */}
             <button
               type="button"
@@ -444,7 +447,7 @@ export function App() {
                 setActiveSection('validation');
               }}
               title="Otvoriť kontrolu súladu s normami STN"
-              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+              className={`hidden md:flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all whitespace-nowrap cursor-pointer shrink-0 ${
                 errorCount > 0
                   ? 'bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25'
                   : warningCount > 0
@@ -455,23 +458,26 @@ export function App() {
               {errorCount > 0 ? (
                 <>
                   <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span>{errorCount} chýb STN</span>
+                  <span className="hidden xl:inline">{errorCount} chýb STN</span>
+                  <span className="xl:hidden font-mono font-bold">{errorCount}</span>
                 </>
               ) : warningCount > 0 ? (
                 <>
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>{warningCount} upozornení</span>
+                  <span className="hidden xl:inline">{warningCount} upozornení</span>
+                  <span className="xl:hidden font-mono font-bold">{warningCount}</span>
                 </>
               ) : (
                 <>
                   <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>STN 61439 OK</span>
+                  <span className="hidden xl:inline">STN 61439 OK</span>
+                  <span className="xl:hidden font-mono font-bold">STN OK</span>
                 </>
               )}
             </button>
 
             {/* Quick Stats */}
-            <div className="hidden lg:flex items-center gap-2.5 bg-[#0F172A] border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono whitespace-nowrap">
+            <div className="hidden 2xl:flex items-center gap-2.5 bg-[#0F172A] border border-slate-800 rounded-lg px-3 py-1.5 text-xs font-mono whitespace-nowrap">
               <span className="text-slate-400">
                 Okruhy: <strong className="text-white">{activeProject.circuits.length}</strong>
               </span>
@@ -489,21 +495,21 @@ export function App() {
             </div>
 
             {saveToast && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
-                <Check className="w-3.5 h-3.5" />
-                <span>{saveToast}</span>
+              <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold whitespace-nowrap">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">{saveToast}</span>
               </div>
             )}
 
             <button
               type="button"
               onClick={() => setAutoSchemaModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#0066FF] to-blue-600 hover:from-blue-600 hover:to-[#0052CC] text-white text-xs font-bold shadow-md shadow-[#0066FF]/30 transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-[#0066FF] to-blue-600 hover:from-blue-600 hover:to-[#0052CC] text-white text-xs font-bold shadow-md shadow-[#0066FF]/30 transition-all cursor-pointer whitespace-nowrap shrink-0"
               title="Automaticky vytvoriť hotovú schému rozvádzača 1 klikom"
             >
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              <span className="hidden sm:inline">Automatické vytvorenie schémy</span>
-              <span className="sm:hidden">Auto schéma</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse shrink-0" />
+              <span className="hidden xl:inline">Automatické vytvorenie schémy</span>
+              <span className="xl:hidden">Auto schéma</span>
             </button>
 
             <button
@@ -512,28 +518,128 @@ export function App() {
                 handleProjectChange(activeProject, 'Manuálne uloženie projektu');
                 triggerToast('Projekt uložený');
               }}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold border border-slate-700/80 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold border border-slate-700/80 transition-all cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>Uložiť</span>
+              <Save className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Uložiť</span>
             </button>
 
             <button
               type="button"
               onClick={() => setConfirmResetModal(true)}
-              className="p-2 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 transition-colors cursor-pointer shrink-0"
               title="Obnoviť vzorové projekty"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
+
+        {/* Mobile Horizontal Module Switcher (under header on screens < lg) */}
+        <div className="lg:hidden bg-[#0F172A] border-t border-slate-800/90 px-3 py-2 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 shrink-0">
+            {PRIMARY_NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveSection(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#0066FF] text-white shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-[#1E293B]'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{item.shortLabel || item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            className={`p-1.5 rounded-lg border text-xs font-bold flex items-center gap-1 shrink-0 cursor-pointer ${
+              mobileMenuOpen || isAdvancedActive
+                ? 'bg-[#0066FF]/20 border-[#0066FF]/60 text-[#38BDF8]'
+                : 'bg-[#1E293B] border-slate-700 text-slate-300 hover:text-white'
+            }`}
+            title="Rozbaliť ďalšie nástroje a telemetriu"
+          >
+            <Sliders className="w-3.5 h-3.5" />
+            <span className="text-[11px] font-mono">Viac</span>
+            {mobileMenuOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Mobile Expandable Panel for Advanced Tools & Telemetry */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden bg-[#0B1120] border-t border-slate-800 p-4 space-y-4 animate-in slide-in-from-top-2 duration-150">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Pokročilé nástroje &amp; nastavenia
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {ADVANCED_NAV_ITEMS.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeSection === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveSection(item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#0066FF] text-white font-bold'
+                          : 'bg-[#0F172A] text-slate-300 hover:bg-[#1E293B] hover:text-white'
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[#38BDF8]'}`} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold truncate">{item.label}</div>
+                        <div className={`text-[10px] truncate ${isActive ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {item.subtitle}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Quick Mobile Telemetry */}
+            <div className="p-3 bg-[#0F172A] rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-300 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-[#38BDF8]" />
+                  Výpočtový príkon Ps
+                </span>
+                <span className="font-mono font-bold text-[#38BDF8]">{load.simultaneousKw} kW</span>
+              </div>
+              <div className="text-[11px] text-slate-400 font-mono flex items-center justify-between">
+                <span>Asymetria fáz:</span>
+                <span className={`font-bold ${load.asymmetryPercent > 20 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {load.asymmetryPercent} %
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* MAIN APPLICATION BODY: DEEP NAVY SIDEBAR + CRISP LIGHT WORKSPACE */}
       <div className="flex-1 max-w-[1920px] w-full mx-auto flex flex-col lg:flex-row">
         {/* LEFT STRUCTURAL SIDEBAR — DEEP NAVY / ANTHRACITE (#0F172A) */}
-        <aside className="no-print w-full lg:w-72 shrink-0 bg-[#0F172A] border-b lg:border-b-0 lg:border-r border-slate-800/90 text-slate-200 flex flex-col justify-between">
+        <aside className="no-print hidden lg:flex lg:w-72 shrink-0 bg-[#0F172A] border-r border-slate-800/90 text-slate-200 flex-col justify-between">
           <div className="p-4 space-y-6">
             {/* PRIMARY 5 NAVIGATION ITEMS (SECTION 4 REQUIREMENT) */}
             <div>
@@ -811,7 +917,7 @@ export function App() {
                 </div>
               </div>
 
-              <div className="h-[740px] print:h-auto bg-white rounded-2xl border border-slate-200 print:border-0 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
+              <div className="h-[520px] sm:h-[640px] lg:h-[740px] print:h-auto bg-white rounded-2xl border border-slate-200 print:border-0 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
                 <ElectricalSchemaCanvas
                   project={activeProject}
                   displayMode={displayMode}
