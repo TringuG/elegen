@@ -944,21 +944,21 @@ export const ProfessionalExportView: React.FC<Props> = ({
                     </div>
                   )}
                   <div className="text-[10px] text-slate-700">{mfg.manufacturerStreet}, {mfg.manufacturerCity}</div>
-                  <div className="text-[9px] text-slate-600">IČO: {mfg.manufacturerIco}</div>
+                  <div className="text-[9px] text-slate-600">IČO: {mfg.manufacturerIco} {mfg.manufacturerDic ? `• DIČ: ${mfg.manufacturerDic}` : ''}</div>
                 </div>
                 <div className="font-serif font-black text-2xl border-2 border-slate-950 px-2 py-0.5 rounded">CE</div>
               </div>
               <div className="text-center font-sans font-bold uppercase text-[10px] pb-1 border-b border-slate-950">
-                ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)
+                {mfg.boardTitle?.trim() || 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)'}
               </div>
               <div className="divide-y divide-slate-300 py-1">
                 <div className="flex justify-between py-0.5"><span>Typ:</span><strong>{mfg.typeDesignation}</strong></div>
                 <div className="flex justify-between py-0.5"><span>Sériové číslo:</span><strong>{mfg.serialNumber}</strong></div>
-                <div className="flex justify-between py-0.5"><span>Napätie Un:</span><strong>{project.supplySystem === '3f' ? '230/400 V AC' : '230 V AC'}</strong></div>
-                <div className="flex justify-between py-0.5"><span>Menovitý prúd InA:</span><strong>{internalDev.enabled ? `${internalDev.ratedCurrent} A` : '40 A'}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Napätie Un:</span><strong>{mfg.customRatedVoltageUn?.trim() || (project.supplySystem === '3f' ? '230/400 V AC' : '230 V AC')}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Menovitý prúd InA:</span><strong>{mfg.customRatedCurrentInA?.trim() || (internalDev.enabled ? `${internalDev.ratedCurrent} A` : '40 A')}</strong></div>
                 <div className="flex justify-between py-0.5"><span>Skratová odolnosť Icn:</span><strong>{mfg.ratedShortCircuitIcnKa || 10} kA</strong></div>
-                <div className="flex justify-between py-0.5"><span>Krytie / Trieda:</span><strong>{project.ipRating} / {mfg.enclosureProtectionClass}</strong></div>
-                <div className="flex justify-between py-0.5"><span>Norma:</span><strong>STN EN 61439-3:2012</strong></div>
+                <div className="flex justify-between py-0.5"><span>Krytie / Trieda:</span><strong>{mfg.customIpRating?.trim() || project.ipRating} / {mfg.enclosureProtectionClass}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Norma:</span><strong>{mfg.standardTitle?.trim() || 'STN EN 61439-3:2012'}</strong></div>
               </div>
             </div>
           </section>

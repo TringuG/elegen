@@ -25,11 +25,15 @@ import {
   Image as ImageIcon,
   Upload,
   Trash2,
+  HardDrive,
+  FolderOpen,
+  RotateCcw,
 } from 'lucide-react';
 import {
   SwitchboardProject,
   SwitchboardManufacturerInfo,
   PieceVerificationChecks,
+  SavedNameplatePreset,
 } from '../types/electrical';
 import {
   calculateDinRailAllocation,
@@ -38,7 +42,17 @@ import {
   getEffectiveInternalDevice,
   getEffectiveManufacturingInfo,
   getEffectiveUpstreamBreaker,
+  saveLastNameplateToBrowserMemory,
+  loadLastNameplateFromBrowserMemory,
+  clearLastNameplateFromBrowserMemory,
+  getSavedNameplatePresets,
+  saveNameplatePresetToBrowserMemory,
+  deleteNameplatePresetFromBrowserMemory,
 } from '../utils/electricalEngine';
+import {
+  exportNameplateToPng,
+  exportNameplateToPdf,
+} from '../utils/pdfSchemaExport';
 
 interface Props {
   project: SwitchboardProject;
@@ -60,7 +74,15 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<ManufacturingTab>('nameplate');
   const [savedBanner, setSavedBanner] = useState<string | null>(null);
-  const [labelSize, setLabelSize] = useState<'standard' | 'compact' | 'large'>('standard');
+  const [labelSize, setLabelSize] = useState<'standard' | 'compact' | 'large'>(() => {
+    const cached = loadLastNameplateFromBrowserMemory();
+    return cached?.labelSize || 'standard';
+  });
+  const [savedPresets, setSavedPresets] = useState<SavedNameplatePreset[]>(() =>
+    getSavedNameplatePresets()
+  );
+  const [presetNameInput, setPresetNameInput] = useState('');
+  const [isExportingLabel, setIsExportingLabel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const SAMPLE_ELECTRICAL_LOGO =
@@ -73,6 +95,12 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
   const internalDev = getEffectiveInternalDevice(project);
   const phaseLoad = calculatePhaseLoad(project);
 
+  const handleLabelSizeChange = (newSize: 'standard' | 'compact' | 'large') => {
+    setLabelSize(newSize);
+    saveLastNameplateToBrowserMemory(mfg, newSize);
+    showSavedFeedback('Veľkosť štítku bola uložená do pamäte prehliadača.');
+  };
+
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -84,11 +112,12 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
         manufacturerLogoUrl: dataUrl,
         logoDisplayMode: 'logo_only', // Predvolene zobraziť logo namiesto názvu
       };
+      saveLastNameplateToBrowserMemory(updatedMfg, labelSize);
       onProjectChange(
         { ...project, manufacturingInfo: updatedMfg },
         'Nahrané firemné logo na výrobný štítok'
       );
-      showSavedFeedback();
+      showSavedFeedback('Logo bolo uložené do projektu aj do pamäte prehliadača.');
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -100,11 +129,12 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
       manufacturerLogoUrl: SAMPLE_ELECTRICAL_LOGO,
       logoDisplayMode: 'logo_only',
     };
+    saveLastNameplateToBrowserMemory(updatedMfg, labelSize);
     onProjectChange(
       { ...project, manufacturingInfo: updatedMfg },
       'Aplikované vzorové elektro logo na výrobný štítok'
     );
-    showSavedFeedback();
+    showSavedFeedback('Vzorové logo bolo aplikované a uložené do pamäte prehliadača.');
   };
 
   const handleRemoveLogo = () => {
@@ -113,11 +143,12 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
       manufacturerLogoUrl: undefined,
       logoDisplayMode: 'text_only',
     };
+    saveLastNameplateToBrowserMemory(updatedMfg, labelSize);
     onProjectChange(
       { ...project, manufacturingInfo: updatedMfg },
       'Odstránené logo z výrobného štítku'
     );
-    showSavedFeedback();
+    showSavedFeedback('Logo bolo odstránené zo štítku.');
   };
 
   const updateMfgField = (
@@ -128,14 +159,91 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
       ...mfg,
       [field]: value,
     };
+    saveLastNameplateToBrowserMemory(updatedMfg, labelSize);
     onProjectChange(
       {
         ...project,
         manufacturingInfo: updatedMfg,
       },
-      `Aktualizácia výrobnej dokumentácie (${String(field)})`
+      `Aktualizácia výrobného štítku (${String(field)})`
     );
     showSavedFeedback();
+  };
+
+  const handleSavePresetToMemory = () => {
+    const title =
+      presetNameInput.trim() ||
+      `${mfg.typeDesignation} – ${mfg.manufacturerName} (${mfg.serialNumber})`;
+    saveLastNameplateToBrowserMemory(mfg, labelSize);
+    const updatedList = saveNameplatePresetToBrowserMemory(title, mfg, labelSize);
+    setSavedPresets(updatedList);
+    setPresetNameInput('');
+    showSavedFeedback(`Štítok „${title}“ bol uložený do pamäte prehliadača.`);
+  };
+
+  const handleLoadPresetFromMemory = (preset: SavedNameplatePreset) => {
+    setLabelSize(preset.labelSize);
+    saveLastNameplateToBrowserMemory(preset.info, preset.labelSize);
+    onProjectChange(
+      {
+        ...project,
+        manufacturingInfo: {
+          ...mfg,
+          ...preset.info,
+        },
+      },
+      `Načítaný uložený štítok z pamäte prehliadača (${preset.presetName})`
+    );
+    showSavedFeedback(`Načítaný štítok „${preset.presetName}“ z pamäte prehliadača.`);
+  };
+
+  const handleDeletePresetFromMemory = (id: string) => {
+    const updatedList = deleteNameplatePresetFromBrowserMemory(id);
+    setSavedPresets(updatedList);
+    showSavedFeedback('Uložený štítok bol odstránený z knižnice prehliadača.');
+  };
+
+  const handleResetNameplateMemory = () => {
+    clearLastNameplateFromBrowserMemory();
+    const cleanMfg: SwitchboardManufacturerInfo = {
+      ...mfg,
+      boardTitle: 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)',
+      standardTitle: 'ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012',
+      customRatedVoltageUn: undefined,
+      customRatedCurrentInA: undefined,
+      customNetworkCode: undefined,
+      customIpRating: undefined,
+      footerWarningText: 'Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!',
+      countryOriginCode: 'SK',
+    };
+    onProjectChange(
+      {
+        ...project,
+        manufacturingInfo: cleanMfg,
+      },
+      'Obnovené predvolené texty výrobného štítku'
+    );
+    showSavedFeedback('Pamäť štítku bola vyčistená a obnovená na automatické hodnoty z projektu.');
+  };
+
+  const handleDownloadNameplatePng = async () => {
+    setIsExportingLabel(true);
+    try {
+      await exportNameplateToPng(project, labelSize);
+      showSavedFeedback('Výrobný štítok bol úspešne stiahnutý ako obrázok PNG (300 DPI).');
+    } finally {
+      setIsExportingLabel(false);
+    }
+  };
+
+  const handleDownloadNameplatePdf = async () => {
+    setIsExportingLabel(true);
+    try {
+      await exportNameplateToPdf(project, labelSize);
+      showSavedFeedback('Výrobný štítok bol úspešne stiahnutý ako čistý PDF dokument s orezovými značkami.');
+    } finally {
+      setIsExportingLabel(false);
+    }
   };
 
   const updateCheckField = (
@@ -171,6 +279,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
       verificationChecks: updatedChecks,
     };
 
+    saveLastNameplateToBrowserMemory(updatedMfg, labelSize);
     onProjectChange(
       {
         ...project,
@@ -181,25 +290,40 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
     showSavedFeedback();
   };
 
-  const showSavedFeedback = () => {
-    setSavedBanner('Zmeny boli automaticky uložené do projektu rozvádzača.');
-    setTimeout(() => setSavedBanner(null), 3000);
+  const showSavedFeedback = (customMessage?: string) => {
+    setSavedBanner(
+      customMessage ||
+        'Zmeny v štítku boli automaticky uložené do projektu aj do pamäte prehliadača (LocalStorage).'
+    );
+    setTimeout(() => setSavedBanner(null), 3500);
   };
 
   const handlePrintCurrentView = () => {
     window.print();
   };
 
-  // Menovité parametre rozvádzača podľa STN EN 61439-1 / 3
-  const ratedVoltageUn =
+  // Menovité parametre rozvádzača podľa STN EN 61439-1 / 3 (s možnosťou vlastného prepísania na štítku)
+  const autoRatedVoltageUn =
     project.supplySystem === '3f' ? '230 / 400 V AC, 50 Hz' : '230 V AC, 50 Hz';
-  const ratedCurrentInA = internalDev.enabled
+  const autoRatedCurrentInA = internalDev.enabled
     ? `${internalDev.ratedCurrent} A`
     : upstream.enabled
     ? `${upstream.ratedCurrent} A`
     : '40 A';
+  const autoNetworkCode = `${project.networkSystem} (${project.supplySystem === '3f' ? '3+N+PE' : '1+N+PE'})`;
+
+  const ratedVoltageUn = mfg.customRatedVoltageUn?.trim() || autoRatedVoltageUn;
+  const ratedCurrentInA = mfg.customRatedCurrentInA?.trim() || autoRatedCurrentInA;
   const ratedShortCircuit = `${mfg.ratedShortCircuitIcnKa || 10} kA (s koordináciou)`;
-  const networkCode = `${project.networkSystem} (${project.supplySystem === '3f' ? '3+N+PE' : '1+N+PE'})`;
+  const networkCode = mfg.customNetworkCode?.trim() || autoNetworkCode;
+  const displayIpRating = mfg.customIpRating?.trim() || project.ipRating;
+  const boardTitle = mfg.boardTitle?.trim() || 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)';
+  const standardTitle =
+    mfg.standardTitle?.trim() || 'ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012';
+  const footerWarningText =
+    mfg.footerWarningText?.trim() ||
+    'Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!';
+  const countryOriginCode = mfg.countryOriginCode?.trim() || 'SK';
 
   return (
     <div className="space-y-6">
@@ -228,11 +352,31 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             type="button"
+            onClick={handleDownloadNameplatePng}
+            disabled={isExportingLabel}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            title="Stiahnuť výrobný štítok ako obrázok PNG vo vysokom rozlíšení"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Štítok PNG</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadNameplatePdf}
+            disabled={isExportingLabel}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+            title="Stiahnuť výrobný štítok ako čistý PDF dokument"
+          >
+            <FileText className="w-4 h-4 text-[#38BDF8]" />
+            <span>Štítok PDF</span>
+          </button>
+          <button
+            type="button"
             onClick={handlePrintCurrentView}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-md shadow-[#0066FF]/30 transition-all cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>Vytlačiť aktuálny dokument</span>
+            <span>Vytlačiť dokument</span>
           </button>
         </div>
       </div>
@@ -251,7 +395,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
             id: 'nameplate' as const,
             label: 'Výrobný štítok (Typový štítok)',
             icon: Tag,
-            badge: 'STN EN 61439 čl. 6.1',
+            badge: 'PNG / PDF + Pamäť',
           },
           {
             id: 'piece-verification' as const,
@@ -316,16 +460,16 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
         <div className="space-y-6">
           {/* Controls Bar */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-wrap items-center justify-between gap-4 no-print">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Veľkosť a formát štítku na tlač:
+                Veľkosť a formát štítku:
               </span>
-              <div className="inline-flex rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
+              <div className="inline-flex flex-wrap rounded-lg bg-slate-100 p-1 border border-slate-200 text-xs">
                 {(['compact', 'standard', 'large'] as const).map((sz) => (
                   <button
                     key={sz}
                     type="button"
-                    onClick={() => setLabelSize(sz)}
+                    onClick={() => handleLabelSizeChange(sz)}
                     className={`px-3 py-1 rounded-md font-bold transition-colors cursor-pointer ${
                       labelSize === sz
                         ? 'bg-[#0066FF] text-white'
@@ -342,14 +486,34 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadNameplatePng}
+                disabled={isExportingLabel}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Uložiť štítok ako PNG</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadNameplatePdf}
+                disabled={isExportingLabel}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Uložiť štítok ako PDF</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handlePrintCurrentView}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5 text-blue-400" />
-                <span>Vytlačiť iba štítok</span>
+                <span>Tlačiť</span>
               </button>
             </div>
           </div>
@@ -357,12 +521,18 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
           {/* Grid Layout: Editable Settings + Visual Nameplate */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Form Settings (Left Column) */}
-            <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4 no-print">
-              <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-                <Building className="w-5 h-5 text-[#0066FF]" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Údaje výrobcu a typové parametre rozvádzača
-                </h3>
+            <div className="lg:col-span-6 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5 no-print">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                <div className="flex items-center gap-2">
+                  <Building className="w-5 h-5 text-[#0066FF]" />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Údaje výrobcu a texty výrobného štítku
+                  </h3>
+                </div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[10px] font-bold text-emerald-700">
+                  <HardDrive className="w-3 h-3" />
+                  Uložené v pamäti prehliadača
+                </span>
               </div>
 
               <div className="space-y-3.5 text-xs">
@@ -496,7 +666,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="space-y-1">
                     <span className="text-slate-700 font-bold">Ulica a číslo:</span>
                     <input
@@ -517,7 +687,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="space-y-1">
                     <span className="text-slate-700 font-bold">IČO výrobcu:</span>
                     <input
@@ -538,7 +708,28 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Nadpis štítku (Druh rozvádzača):</span>
+                    <input
+                      type="text"
+                      value={mfg.boardTitle ?? 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)'}
+                      onChange={(e) => updateMfgField('boardTitle', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-semibold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Podnadpis normy:</span>
+                    <input
+                      type="text"
+                      value={mfg.standardTitle ?? 'ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012'}
+                      onChange={(e) => updateMfgField('standardTitle', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <label className="space-y-1">
                     <span className="text-slate-700 font-bold">Typové označenie (DBO):</span>
                     <input
@@ -559,7 +750,53 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Menovité napätie (Un):</span>
+                    <input
+                      type="text"
+                      placeholder={autoRatedVoltageUn}
+                      value={mfg.customRatedVoltageUn ?? ''}
+                      onChange={(e) => updateMfgField('customRatedVoltageUn', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Menovitý prúd rozvádzača (InA):</span>
+                    <input
+                      type="text"
+                      placeholder={autoRatedCurrentInA}
+                      value={mfg.customRatedCurrentInA ?? ''}
+                      onChange={(e) => updateMfgField('customRatedCurrentInA', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Druh siete / Sústava:</span>
+                    <input
+                      type="text"
+                      placeholder={autoNetworkCode}
+                      value={mfg.customNetworkCode ?? ''}
+                      onChange={(e) => updateMfgField('customNetworkCode', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Stupeň ochrany krytom (IP):</span>
+                    <input
+                      type="text"
+                      placeholder={project.ipRating}
+                      value={mfg.customIpRating ?? ''}
+                      onChange={(e) => updateMfgField('customIpRating', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <label className="space-y-1">
                     <span className="text-slate-700 font-bold">Rok výroby:</span>
                     <input
@@ -591,19 +828,88 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                   </label>
                 </div>
 
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start gap-2">
-                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Zákonná povinnosť:</strong> Podľa STN EN 61439-1 čl. 6.1 a STN EN 61439-3
-                    musí byť každý rozvádzač vybavený trvanlivým a čitateľným štítkom s identifikačnými údajmi
-                    výrobcu, menovitým prúdom InA, napätím Un, skratovou odolnosťou a normou.
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Súčiniteľ RDF:</span>
+                    <input
+                      type="number"
+                      step={0.05}
+                      min={0.1}
+                      max={1.0}
+                      value={mfg.ratedDiversityFactor || 0.8}
+                      onChange={(e) => updateMfgField('ratedDiversityFactor', parseFloat(e.target.value) || 0.8)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Rozsah teplôt okolia:</span>
+                    <input
+                      type="text"
+                      value={mfg.ambientTempRange}
+                      onChange={(e) => updateMfgField('ambientTempRange', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Dátum výroby / skúšky:</span>
+                    <input
+                      type="text"
+                      value={mfg.testedDate}
+                      onChange={(e) => updateMfgField('testedDate', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <label className="sm:col-span-3 space-y-1">
+                    <span className="text-slate-700 font-bold">Bezpečnostné upozornenie v pätičke štítku:</span>
+                    <input
+                      type="text"
+                      value={
+                        mfg.footerWarningText ??
+                        'Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!'
+                      }
+                      onChange={(e) => updateMfgField('footerWarningText', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-medium focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-slate-700 font-bold">Kód krajiny:</span>
+                    <input
+                      type="text"
+                      value={mfg.countryOriginCode ?? 'SK'}
+                      onChange={(e) => updateMfgField('countryOriginCode', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold uppercase focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                    />
+                  </label>
+                </div>
+
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>Automatické ukladanie do pamäte prehliadača:</strong> Všetko, čo do
+                      štítku napíšete (názov firmy, IČO, logo, typ, S/N, napätie, prúd aj poznámky),
+                      sa okamžite ukladá do pamäte prehliadača (<code>localStorage</code>) a zostane
+                      zachované aj po zatvorení alebo obnovení stránky.
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleResetNameplateMemory}
+                    className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-blue-100 border border-blue-200 text-blue-800 font-bold text-[10px] transition-colors cursor-pointer"
+                    title="Obnoviť automatické hodnoty z projektu"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Resetovať</span>
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Visual Real Nameplate (Right Column / Printable) */}
-            <div className="lg:col-span-6 space-y-4">
+            {/* Visual Real Nameplate + Download & Browser Memory Presets (Right Column) */}
+            <div className="lg:col-span-6 space-y-5">
               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between no-print">
                 <span>Náhľad skutočného výrobného štítku na rozvádzač:</span>
                 <span className="text-slate-400 font-mono">STN EN 61439-3 (DBO)</span>
@@ -671,9 +977,9 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
 
                 {/* Device Title & Standard */}
                 <div className="text-center font-bold uppercase tracking-wider text-slate-900 mb-2 border-b border-slate-950 pb-1">
-                  ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)
+                  {boardTitle}
                   <div className="text-[9px] font-mono text-slate-600 font-normal">
-                    ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012
+                    {standardTitle}
                   </div>
                 </div>
 
@@ -696,7 +1002,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
 
                   <div className="grid grid-cols-2 py-1">
                     <span className="font-sans font-bold text-slate-700">Menovitý prúd rozvádzača (InA):</span>
-                    <span className="text-right font-bold text-slate-950 text-blue-700">{ratedCurrentInA}</span>
+                    <span className="text-right font-bold text-blue-700">{ratedCurrentInA}</span>
                   </div>
 
                   <div className="grid grid-cols-2 py-1">
@@ -711,7 +1017,7 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
 
                   <div className="grid grid-cols-2 py-1">
                     <span className="font-sans font-bold text-slate-700">Stupeň ochrany krytom:</span>
-                    <span className="text-right font-bold text-slate-950">{project.ipRating}</span>
+                    <span className="text-right font-bold text-slate-950">{displayIpRating}</span>
                   </div>
 
                   <div className="grid grid-cols-2 py-1">
@@ -740,12 +1046,128 @@ export const SwitchboardManufacturingView: React.FC<Props> = ({
                 {/* Footer Warning & Barcode */}
                 <div className="mt-3 pt-2 border-t-2 border-slate-950 flex items-center justify-between gap-2 text-[9px] text-slate-600">
                   <div className="font-sans">
-                    Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!
+                    {footerWarningText}
                   </div>
-                  <div className="font-mono text-slate-900 font-bold tracking-widest uppercase">
-                    SK • {mfg.productionYear}
+                  <div className="font-mono text-slate-900 font-bold tracking-widest uppercase shrink-0">
+                    {countryOriginCode} • {mfg.productionYear}
                   </div>
                 </div>
+              </div>
+
+              {/* Direct Export Action Card below Nameplate */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3 no-print">
+                <div className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                  <span>Priamy export a stiahnutie štítku (300 DPI):</span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    {labelSize === 'compact'
+                      ? '80 × 50 mm'
+                      : labelSize === 'large'
+                      ? '148 × 105 mm (A6)'
+                      : '110 × 75 mm'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleDownloadNameplatePng}
+                    disabled={isExportingLabel}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Stiahnuť štítok ako PNG</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadNameplatePdf}
+                    disabled={isExportingLabel}
+                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>Stiahnuť štítok ako PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Browser Memory Nameplate Library (Knižnica uložených štítkov v pamäti prehliadača) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4 no-print">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div className="flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-[#0066FF]" />
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Pamäť prehliadača — Uložené štítky ({savedPresets.length})
+                    </h4>
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-bold">
+                    Auto-záloha aktívna
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Aktuálne rozpísaný štítok sa automaticky pamätá v prehliadači. Navyše si tu môžete
+                  uložiť ľubovoľný počet hotových štítkov (napr. pre rôzne firmy, typy rozvádzačov
+                  alebo zákazky) a kedykoľvek ich jedným kliknutím načítať.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder={`Názov v pamäti (napr. ${mfg.typeDesignation} – ${mfg.manufacturerName})`}
+                    value={presetNameInput}
+                    onChange={(e) => setPresetNameInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-medium focus:bg-white focus:border-[#0066FF] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSavePresetToMemory}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  >
+                    <Save className="w-3.5 h-3.5 text-[#38BDF8]" />
+                    <span>Uložiť štítok do pamäte</span>
+                  </button>
+                </div>
+
+                {savedPresets.length > 0 ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {savedPresets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 hover:border-slate-300 transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-slate-900 truncate">
+                            {preset.presetName}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500 truncate">
+                            {preset.info.manufacturerName} • S/N: {preset.info.serialNumber} • Uložené: {preset.savedAt}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleLoadPresetFromMemory(preset)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-[11px] font-bold transition-colors cursor-pointer"
+                          >
+                            <FolderOpen className="w-3 h-3" />
+                            <span>Načítať</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePresetFromMemory(preset.id)}
+                            className="p-1.5 rounded-lg bg-white hover:bg-red-50 text-slate-400 hover:text-red-600 border border-slate-200 transition-colors cursor-pointer"
+                            title="Odstrániť z pamäte prehliadača"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-300 text-center text-xs text-slate-500">
+                    Zatiaľ nemáte uložené žiadne pomenované šablóny štítkov. Aktuálne vypísané údaje
+                    sa však automaticky ukladajú do pamäte prehliadača pri každom písaní.
+                  </div>
+                )}
               </div>
 
               {/* Instructions Pill */}

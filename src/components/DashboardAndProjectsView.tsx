@@ -168,7 +168,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
       {/* SCREEN 1: HERO ACTIVE PROJECT BANNER (DEEP NAVY + ELECTRIC BLUE)      */}
       {/* ===================================================================== */}
       <div className="bg-gradient-to-r from-[#0B1120] via-[#0F172A] to-[#1E293B] text-white rounded-2xl p-6 lg:p-7 border border-slate-800 shadow-lg">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+        <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-5 sm:gap-6">
           <div className="space-y-3 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-1 rounded-md bg-[#0066FF] text-white font-mono text-xs font-bold uppercase tracking-wider">
@@ -218,20 +218,20 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
           </div>
 
           {/* Primary CTA Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 shrink-0 w-full xl:w-auto">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={() => onNavigate('smart-designer')}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs sm:text-sm font-bold shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs sm:text-sm font-bold shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer whitespace-nowrap"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Upraviť rozvádzač (Kroky 1–6)</span>
+              <span>Upraviť rozvádzač</span>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('schema-editor')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
             >
               <Cpu className="w-4 h-4 text-[#38BDF8]" />
               <span>Editor schémy</span>
@@ -240,7 +240,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             <button
               type="button"
               onClick={() => onNavigate('manufacturing')}
-              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
               title="Generovať výrobný štítok, protokol kusovej skúšky a CE vyhlásenie o zhode"
             >
               <Award className="w-4 h-4 text-amber-400" />
@@ -250,7 +250,7 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             <button
               type="button"
               onClick={() => onNavigate('documentation')}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               <span>Kusovník a PDF</span>

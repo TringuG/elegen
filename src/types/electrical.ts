@@ -224,8 +224,24 @@ export interface SwitchboardManufacturerInfo {
   manufacturerLogoUrl?: string; // Base64 Data URL alebo URL adresa firemného loga
   logoDisplayMode?: 'text_only' | 'logo_only' | 'both'; // Zobrazenie na výrobnom štítku
   logoHeightMm?: number; // Výška loga na štítku (napr. 12 až 24 mm)
+  boardTitle?: string; // Nadpis štítku napr. ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)
+  standardTitle?: string; // Norma na štítku napr. ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012
+  customRatedVoltageUn?: string; // Vlastný text pre Menovité napätie (Un)
+  customRatedCurrentInA?: string; // Vlastný text pre Menovitý prúd rozvádzača (InA)
+  customNetworkCode?: string; // Vlastný text pre Druh siete / Sústava
+  customIpRating?: string; // Vlastný text pre Stupeň ochrany krytom (IP)
+  footerWarningText?: string; // Upozornenie v pätičke štítku
+  countryOriginCode?: string; // Kód krajiny napr. SK
   notes?: string;
   verificationChecks?: PieceVerificationChecks;
+}
+
+export interface SavedNameplatePreset {
+  id: string;
+  presetName: string;
+  savedAt: string;
+  labelSize: 'compact' | 'standard' | 'large';
+  info: SwitchboardManufacturerInfo;
 }
 
 export interface SwitchboardProject {

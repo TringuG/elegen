@@ -4,6 +4,7 @@ import {
   generateBom,
   getEffectiveUpstreamBreaker,
   getEffectiveInternalDevice,
+  getEffectiveManufacturingInfo,
   calculateDinRailAllocation,
 } from './electricalEngine';
 
@@ -679,3 +680,409 @@ export async function exportCleanSchemaToPng(
   link.click();
   document.body.removeChild(link);
 }
+
+/**
+ * Helper to load a data URL or image URL into an HTMLImageElement safely.
+ */
+function loadImageSafe(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/**
+ * Renders the industrial switchboard nameplate (Výrobný štítok rozvádzača podľa STN EN 61439-1 / 3)
+ * onto a high-resolution HTML5 Canvas.
+ */
+export async function renderNameplateToCanvas(
+  project: SwitchboardProject,
+  labelSize: 'compact' | 'standard' | 'large' = 'standard',
+  includeCropMarksForPdf = false
+): Promise<HTMLCanvasElement> {
+  const mfg = getEffectiveManufacturingInfo(project);
+  const upstream = getEffectiveUpstreamBreaker(project);
+  const internalDev = getEffectiveInternalDevice(project);
+
+  const ratedVoltageUn =
+    mfg.customRatedVoltageUn ||
+    (project.supplySystem === '3f' ? '230 / 400 V AC, 50 Hz' : '230 V AC, 50 Hz');
+  const ratedCurrentInA =
+    mfg.customRatedCurrentInA ||
+    (internalDev.enabled
+      ? `${internalDev.ratedCurrent} A`
+      : upstream.enabled
+      ? `${upstream.ratedCurrent} A`
+      : '40 A');
+  const ratedShortCircuit = `${mfg.ratedShortCircuitIcnKa || 10} kA (s koordináciou)`;
+  const networkCode =
+    mfg.customNetworkCode ||
+    `${project.networkSystem} (${project.supplySystem === '3f' ? '3+N+PE' : '1+N+PE'})`;
+  const ipRating = mfg.customIpRating || project.ipRating;
+  const boardTitle = mfg.boardTitle || 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)';
+  const standardTitle =
+    mfg.standardTitle || 'ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012';
+  const footerWarningText =
+    mfg.footerWarningText ||
+    'Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!';
+  const countryOriginCode = mfg.countryOriginCode || 'SK';
+
+  const scale = labelSize === 'compact' ? 0.88 : labelSize === 'large' ? 1.14 : 1.0;
+  const cardW = Math.round(1120 * scale);
+  const rowCount = 11;
+  const rowH = Math.round(44 * scale);
+  const headerH = Math.round(165 * scale);
+  const titleBarH = Math.round(74 * scale);
+  const footerH = Math.round(62 * scale);
+  const innerPad = Math.round(36 * scale);
+
+  const cardH = innerPad * 2 + headerH + titleBarH + rowCount * rowH + footerH;
+  const outerPad = includeCropMarksForPdf ? Math.round(90 * scale) : Math.round(28 * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cardW + outerPad * 2;
+  canvas.height = cardH + outerPad * 2;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+
+  // Background
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const x0 = outerPad;
+  const y0 = outerPad;
+
+  // Optional crop marks & dimension caption for PDF sheet
+  if (includeCropMarksForPdf) {
+    const dimLabel =
+      labelSize === 'compact'
+        ? 'Rozmer štítku: 80 × 50 mm (Páskový)'
+        : labelSize === 'large'
+        ? 'Rozmer štítku: 148 × 105 mm (Veľký A6)'
+        : 'Rozmer štítku: 110 × 75 mm (Priemyselný štandard)';
+    ctx.fillStyle = '#64748B';
+    ctx.font = `600 ${Math.round(18 * scale)}px "JetBrains Mono", monospace`;
+    ctx.fillText(
+      `VÝROBNÝ ŠTÍTOK ROZVÁDZAČA • ${dimLabel} • STN EN 61439-1 / 3`,
+      x0,
+      y0 - Math.round(26 * scale)
+    );
+
+    // Subtle corner crop marks
+    ctx.strokeStyle = '#94A3B8';
+    ctx.lineWidth = 1.5;
+    const cm = Math.round(22 * scale);
+    // Top-left
+    ctx.beginPath();
+    ctx.moveTo(x0 - cm, y0);
+    ctx.lineTo(x0 - 6, y0);
+    ctx.moveTo(x0, y0 - cm);
+    ctx.lineTo(x0, y0 - 6);
+    // Top-right
+    ctx.moveTo(x0 + cardW + 6, y0);
+    ctx.lineTo(x0 + cardW + cm, y0);
+    ctx.moveTo(x0 + cardW, y0 - cm);
+    ctx.lineTo(x0 + cardW, y0 - 6);
+    // Bottom-left
+    ctx.moveTo(x0 - cm, y0 + cardH);
+    ctx.lineTo(x0 - 6, y0 + cardH);
+    ctx.moveTo(x0, y0 + cardH + 6);
+    ctx.lineTo(x0, y0 + cardH + cm);
+    // Bottom-right
+    ctx.moveTo(x0 + cardW + 6, y0 + cardH);
+    ctx.lineTo(x0 + cardW + cm, y0 + cardH);
+    ctx.moveTo(x0 + cardW, y0 + cardH + 6);
+    ctx.lineTo(x0 + cardW, y0 + cardH + cm);
+    ctx.stroke();
+  }
+
+  // Outer thick industrial border
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(x0, y0, cardW, cardH);
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = Math.round(8 * scale);
+  ctx.strokeRect(x0, y0, cardW, cardH);
+
+  const cx = x0 + innerPad;
+  const cw = cardW - innerPad * 2;
+  let curY = y0 + innerPad;
+
+  // 1. Header Zone: Manufacturer / Logo on Left, CE + Lightning on Right
+  let logoImg: HTMLImageElement | null = null;
+  if (mfg.manufacturerLogoUrl && mfg.logoDisplayMode !== 'text_only') {
+    logoImg = await loadImageSafe(mfg.manufacturerLogoUrl);
+  }
+
+  let leftTextY = curY;
+  const maxLeftW = cw - Math.round(230 * scale);
+
+  if (logoImg && mfg.logoDisplayMode === 'logo_only') {
+    const targetH = Math.min(
+      Math.round(78 * scale),
+      Math.round((mfg.logoHeightMm || 18) * 3.8 * scale)
+    );
+    const ratio = logoImg.width / Math.max(1, logoImg.height);
+    const targetW = Math.min(Math.round(480 * scale), Math.round(targetH * ratio));
+    ctx.drawImage(logoImg, cx, leftTextY, targetW, targetH);
+    leftTextY += targetH + Math.round(14 * scale);
+  } else if (logoImg && mfg.logoDisplayMode === 'both') {
+    const targetH = Math.min(
+      Math.round(58 * scale),
+      Math.round((mfg.logoHeightMm || 16) * 3.2 * scale)
+    );
+    const ratio = logoImg.width / Math.max(1, logoImg.height);
+    const targetW = Math.min(Math.round(240 * scale), Math.round(targetH * ratio));
+    ctx.drawImage(logoImg, cx, leftTextY, targetW, targetH);
+
+    ctx.fillStyle = '#020617';
+    ctx.font = `900 ${Math.round(27 * scale)}px "Plus Jakarta Sans", sans-serif`;
+    ctx.fillText(
+      fitText(ctx, mfg.manufacturerName.toUpperCase(), maxLeftW - targetW - 20),
+      cx + targetW + Math.round(18 * scale),
+      leftTextY + Math.round(targetH * 0.68)
+    );
+    leftTextY += targetH + Math.round(14 * scale);
+  } else {
+    ctx.fillStyle = '#020617';
+    ctx.font = `900 ${Math.round(30 * scale)}px "Plus Jakarta Sans", sans-serif`;
+    ctx.fillText(
+      fitText(ctx, mfg.manufacturerName.toUpperCase(), maxLeftW),
+      cx,
+      leftTextY + Math.round(30 * scale)
+    );
+    leftTextY += Math.round(44 * scale);
+  }
+
+  // Street & City
+  ctx.fillStyle = '#334155';
+  ctx.font = `600 ${Math.round(21 * scale)}px "Plus Jakarta Sans", sans-serif`;
+  ctx.fillText(
+    fitText(ctx, `${mfg.manufacturerStreet}, ${mfg.manufacturerCity}`, maxLeftW),
+    cx,
+    leftTextY + Math.round(18 * scale)
+  );
+  leftTextY += Math.round(28 * scale);
+
+  // ICO & DIC
+  ctx.fillStyle = '#334155';
+  ctx.font = `600 ${Math.round(20 * scale)}px "JetBrains Mono", monospace`;
+  const icoText = `IČO: ${mfg.manufacturerIco}${
+    mfg.manufacturerDic ? ` • DIČ: ${mfg.manufacturerDic}` : ''
+  }`;
+  ctx.fillText(fitText(ctx, icoText, maxLeftW), cx, leftTextY + Math.round(18 * scale));
+
+  // Right Icons: CE Box & High-Voltage Flash Box
+  const ceBoxSize = Math.round(82 * scale);
+  const boltBoxSize = Math.round(76 * scale);
+  const ceX = cx + cw - ceBoxSize - boltBoxSize - Math.round(18 * scale);
+  const boltX = cx + cw - boltBoxSize;
+  const badgeY = curY + Math.round(6 * scale);
+
+  // CE Box
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = Math.round(4.5 * scale);
+  ctx.strokeRect(ceX, badgeY, ceBoxSize, ceBoxSize);
+  ctx.fillStyle = '#020617';
+  ctx.font = `900 ${Math.round(44 * scale)}px Georgia, serif`;
+  const ceMetrics = ctx.measureText('CE');
+  ctx.fillText(
+    'CE',
+    ceX + (ceBoxSize - ceMetrics.width) / 2,
+    badgeY + ceBoxSize * 0.68
+  );
+
+  // Lightning Warning Box
+  const boltY = badgeY + Math.round(3 * scale);
+  ctx.fillStyle = '#FACC15';
+  ctx.fillRect(boltX, boltY, boltBoxSize, boltBoxSize);
+  ctx.strokeStyle = '#D97706';
+  ctx.lineWidth = Math.round(4.5 * scale);
+  ctx.strokeRect(boltX, boltY, boltBoxSize, boltBoxSize);
+
+  // Lightning Bolt Polygon
+  ctx.fillStyle = '#020617';
+  ctx.beginPath();
+  const bxCenter = boltX + boltBoxSize / 2;
+  const byCenter = boltY + boltBoxSize / 2;
+  const bs = boltBoxSize * 0.34;
+  ctx.moveTo(bxCenter + bs * 0.25, byCenter - bs);
+  ctx.lineTo(bxCenter - bs * 0.65, byCenter + bs * 0.1);
+  ctx.lineTo(bxCenter - bs * 0.05, byCenter + bs * 0.1);
+  ctx.lineTo(bxCenter - bs * 0.3, byCenter + bs);
+  ctx.lineTo(bxCenter + bs * 0.65, byCenter - bs * 0.1);
+  ctx.lineTo(bxCenter + bs * 0.05, byCenter - bs * 0.1);
+  ctx.closePath();
+  ctx.fill();
+
+  curY += headerH;
+
+  // Header bottom divider
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = Math.round(4.5 * scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, curY - Math.round(16 * scale));
+  ctx.lineTo(cx + cw, curY - Math.round(16 * scale));
+  ctx.stroke();
+
+  // 2. Device Title & Standard
+  ctx.fillStyle = '#020617';
+  ctx.font = `900 ${Math.round(25 * scale)}px "Plus Jakarta Sans", sans-serif`;
+  const titleMetrics = ctx.measureText(boardTitle.toUpperCase());
+  ctx.fillText(
+    boardTitle.toUpperCase(),
+    cx + Math.max(0, (cw - titleMetrics.width) / 2),
+    curY + Math.round(18 * scale)
+  );
+
+  ctx.fillStyle = '#475569';
+  ctx.font = `600 ${Math.round(18 * scale)}px "JetBrains Mono", monospace`;
+  const stdMetrics = ctx.measureText(standardTitle.toUpperCase());
+  ctx.fillText(
+    standardTitle.toUpperCase(),
+    cx + Math.max(0, (cw - stdMetrics.width) / 2),
+    curY + Math.round(44 * scale)
+  );
+
+  curY += titleBarH;
+
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = Math.round(3 * scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, curY - Math.round(12 * scale));
+  ctx.lineTo(cx + cw, curY - Math.round(12 * scale));
+  ctx.stroke();
+
+  // 3. Technical Parameters Rows (11 rows)
+  const techRows: Array<{ label: string; value: string; highlightBlue?: boolean }> = [
+    { label: 'Typové označenie:', value: mfg.typeDesignation },
+    { label: 'Výrobné číslo (S/N):', value: mfg.serialNumber },
+    { label: 'Menovité napätie (Un):', value: ratedVoltageUn },
+    { label: 'Menovitý prúd rozvádzača (InA):', value: ratedCurrentInA, highlightBlue: true },
+    { label: 'Menovitý podmienený skrat (Icn):', value: ratedShortCircuit },
+    { label: 'Druh siete / Sústava:', value: networkCode },
+    { label: 'Stupeň ochrany krytom:', value: ipRating },
+    { label: 'Trieda ochrany:', value: mfg.enclosureProtectionClass },
+    { label: 'Súčiniteľ súdobosti (RDF):', value: String(mfg.ratedDiversityFactor || 0.8) },
+    { label: 'Rozsah teplôt okolia:', value: mfg.ambientTempRange },
+    {
+      label: 'Dátum a rok výroby:',
+      value: `${mfg.testedDate} (${mfg.productionYear})`,
+    },
+  ];
+
+  techRows.forEach((row, idx) => {
+    const ry = curY + idx * rowH;
+    if (idx > 0) {
+      ctx.strokeStyle = '#CBD5E1';
+      ctx.lineWidth = Math.round(1.5 * scale);
+      ctx.beginPath();
+      ctx.moveTo(cx, ry);
+      ctx.lineTo(cx + cw, ry);
+      ctx.stroke();
+    }
+
+    const textY = ry + Math.round(rowH * 0.68);
+    ctx.fillStyle = '#334155';
+    ctx.font = `700 ${Math.round(21 * scale)}px "Plus Jakarta Sans", sans-serif`;
+    ctx.fillText(row.label, cx, textY);
+
+    ctx.fillStyle = row.highlightBlue ? '#1D4ED8' : '#020617';
+    ctx.font = `700 ${Math.round(21 * scale)}px "JetBrains Mono", monospace`;
+    const valStr = fitText(ctx, row.value, cw * 0.55);
+    const valW = ctx.measureText(valStr).width;
+    ctx.fillText(valStr, cx + cw - valW, textY);
+  });
+
+  curY += techRows.length * rowH;
+
+  // 4. Footer Warning & Country/Year
+  ctx.strokeStyle = '#020617';
+  ctx.lineWidth = Math.round(4.5 * scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, curY + Math.round(12 * scale));
+  ctx.lineTo(cx + cw, curY + Math.round(12 * scale));
+  ctx.stroke();
+
+  const footTextY = curY + Math.round(45 * scale);
+  ctx.fillStyle = '#475569';
+  ctx.font = `600 ${Math.round(18 * scale)}px "Plus Jakarta Sans", sans-serif`;
+  ctx.fillText(fitText(ctx, footerWarningText, cw * 0.78), cx, footTextY);
+
+  const originText = `${countryOriginCode} • ${mfg.productionYear}`;
+  ctx.fillStyle = '#020617';
+  ctx.font = `800 ${Math.round(19 * scale)}px "JetBrains Mono", monospace`;
+  const origW = ctx.measureText(originText).width;
+  ctx.fillText(originText, cx + cw - origW, footTextY);
+
+  return canvas;
+}
+
+/**
+ * Exports ONLY the industrial switchboard nameplate as a high-resolution PNG file.
+ */
+export async function exportNameplateToPng(
+  project: SwitchboardProject,
+  labelSize: 'compact' | 'standard' | 'large' = 'standard'
+): Promise<void> {
+  const mfg = getEffectiveManufacturingInfo(project);
+  const canvas = await renderNameplateToCanvas(project, labelSize, false);
+  const dataUrl = canvas.toDataURL('image/png');
+  const safeSerial = (mfg.serialNumber || project.projectNumber || 'rozvadzac').replace(
+    /[^a-zA-Z0-9_-]/g,
+    '_'
+  );
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = `${safeSerial}_Vyrobny_Stitok_${labelSize}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/**
+ * Exports ONLY the industrial switchboard nameplate as a clean vector-grade PDF document
+ * with crop marks ready for printing.
+ */
+export async function exportNameplateToPdf(
+  project: SwitchboardProject,
+  labelSize: 'compact' | 'standard' | 'large' = 'standard'
+): Promise<void> {
+  const mfg = getEffectiveManufacturingInfo(project);
+  const canvas = await renderNameplateToCanvas(project, labelSize, true);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.96);
+  const jpegBytes = dataUrlToUint8Array(dataUrl);
+
+  // Physical width in PDF points (1 mm = 2.83465 pt) including crop margin
+  const baseMmWidth = labelSize === 'compact' ? 110 : labelSize === 'large' ? 175 : 140;
+  const ptWidth = +(baseMmWidth * 2.83465).toFixed(2);
+  const aspect = canvas.height / canvas.width;
+  const ptHeight = +(ptWidth * aspect).toFixed(2);
+
+  const pdfBlob = buildPdfFromJpegPages([
+    {
+      jpegBytes,
+      pixelWidth: canvas.width,
+      pixelHeight: canvas.height,
+      ptWidth,
+      ptHeight,
+    },
+  ]);
+
+  const url = URL.createObjectURL(pdfBlob);
+  const safeSerial = (mfg.serialNumber || project.projectNumber || 'rozvadzac').replace(
+    /[^a-zA-Z0-9_-]/g,
+    '_'
+  );
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${safeSerial}_Vyrobny_Stitok_${labelSize}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+

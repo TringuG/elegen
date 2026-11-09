@@ -28,6 +28,7 @@ import {
   StnValidationIssue,
   SwitchboardProject,
   SwitchboardManufacturerInfo,
+  SavedNameplatePreset,
   UpstreamBreakerPlacement,
 } from '../types/electrical';
 
@@ -3682,9 +3683,129 @@ export function calculateThermalDissipation(project: SwitchboardProject): Therma
   };
 }
 
+export const STORAGE_KEY_LAST_NAMEPLATE = 'elektro_schema_pro_last_nameplate_v1';
+export const STORAGE_KEY_SAVED_NAMEPLATES = 'elektro_schema_pro_saved_nameplates_v1';
+
+export function saveLastNameplateToBrowserMemory(
+  info: SwitchboardManufacturerInfo,
+  labelSize?: 'compact' | 'standard' | 'large'
+): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(
+        STORAGE_KEY_LAST_NAMEPLATE,
+        JSON.stringify({
+          info,
+          labelSize: labelSize || 'standard',
+          updatedAt: new Date().toLocaleString('sk-SK'),
+        })
+      );
+    }
+  } catch (e) {
+    console.error('Chyba ukladania štítku do pamäte prehliadača:', e);
+  }
+}
+
+export function loadLastNameplateFromBrowserMemory(): {
+  info: Partial<SwitchboardManufacturerInfo>;
+  labelSize?: 'compact' | 'standard' | 'large';
+  updatedAt?: string;
+} | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(STORAGE_KEY_LAST_NAMEPLATE);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.info) {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Chyba načítania štítku z pamäte prehliadača:', e);
+  }
+  return null;
+}
+
+export function clearLastNameplateFromBrowserMemory(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_LAST_NAMEPLATE);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export function getSavedNameplatePresets(): SavedNameplatePreset[] {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(STORAGE_KEY_SAVED_NAMEPLATES);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Chyba načítania uložených štítkov:', e);
+  }
+  return [];
+}
+
+export function saveNameplatePresetToBrowserMemory(
+  presetName: string,
+  info: SwitchboardManufacturerInfo,
+  labelSize: 'compact' | 'standard' | 'large' = 'standard'
+): SavedNameplatePreset[] {
+  const existing = getSavedNameplatePresets();
+  const newPreset: SavedNameplatePreset = {
+    id: `np-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    presetName: presetName.trim() || `${info.typeDesignation} (${info.manufacturerName})`,
+    savedAt: new Date().toLocaleString('sk-SK'),
+    labelSize,
+    info: JSON.parse(JSON.stringify(info)),
+  };
+  const updated = [newPreset, ...existing.slice(0, 29)];
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_SAVED_NAMEPLATES, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.error('Chyba uloženia štítku do zoznamu:', e);
+  }
+  return updated;
+}
+
+export function deleteNameplatePresetFromBrowserMemory(id: string): SavedNameplatePreset[] {
+  const existing = getSavedNameplatePresets();
+  const updated = existing.filter((p) => p.id !== id);
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_SAVED_NAMEPLATES, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.error('Chyba vymazania štítku zo zoznamu:', e);
+  }
+  return updated;
+}
+
 export function getEffectiveManufacturingInfo(project: SwitchboardProject): SwitchboardManufacturerInfo {
   const currentYear = new Date().getFullYear();
   const todayFormatted = new Date().toLocaleDateString('sk-SK');
+  const upstream = getEffectiveUpstreamBreaker(project);
+  const internalDev = getEffectiveInternalDevice(project);
+
+  const defaultVoltageUn =
+    project.supplySystem === '3f' ? '230 / 400 V AC, 50 Hz' : '230 V AC, 50 Hz';
+  const defaultCurrentInA = internalDev.enabled
+    ? `${internalDev.ratedCurrent} A`
+    : upstream.enabled
+    ? `${upstream.ratedCurrent} A`
+    : '40 A';
+  const defaultNetworkCode = `${project.networkSystem} (${project.supplySystem === '3f' ? '3+N+PE' : '1+N+PE'})`;
+
   const defaults: SwitchboardManufacturerInfo = {
     manufacturerName: 'ELEKTRO MONTÁŽ & VÝROBA ROZVÁDZAČOV s.r.o.',
     manufacturerStreet: 'Priemyselná 12',
@@ -3711,6 +3832,14 @@ export function getEffectiveManufacturingInfo(project: SwitchboardProject): Swit
     manufacturerLogoUrl: undefined,
     logoDisplayMode: 'text_only',
     logoHeightMm: 16,
+    boardTitle: 'ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)',
+    standardTitle: 'ZHODA PODĽA STN EN 61439-1:2021 / STN EN 61439-3:2012',
+    customRatedVoltageUn: defaultVoltageUn,
+    customRatedCurrentInA: defaultCurrentInA,
+    customNetworkCode: defaultNetworkCode,
+    customIpRating: project.ipRating,
+    footerWarningText: 'Pred zásahom do vnútra rozvádzača bezpečne odpojiť od napájania!',
+    countryOriginCode: 'SK',
     notes: 'Kusové overenie vykonané v súlade s STN EN 61439-1 čl. 11 a STN EN 61439-3. Výrobok spĺňa všetky bezpečnostné požiadavky.',
     verificationChecks: {
       ipRatingChecked: true,
@@ -3732,15 +3861,31 @@ export function getEffectiveManufacturingInfo(project: SwitchboardProject): Swit
     },
   };
 
+  const savedInBrowser = loadLastNameplateFromBrowserMemory();
+  const browserMemoryDefaults: Partial<SwitchboardManufacturerInfo> = savedInBrowser?.info
+    ? {
+        ...savedInBrowser.info,
+      }
+    : {};
+
   if (!project.manufacturingInfo) {
-    return defaults;
+    return {
+      ...defaults,
+      ...browserMemoryDefaults,
+      verificationChecks: {
+        ...defaults.verificationChecks!,
+        ...(browserMemoryDefaults.verificationChecks || {}),
+      },
+    };
   }
 
   return {
     ...defaults,
+    ...browserMemoryDefaults,
     ...project.manufacturingInfo,
     verificationChecks: {
       ...defaults.verificationChecks!,
+      ...(browserMemoryDefaults.verificationChecks || {}),
       ...(project.manufacturingInfo.verificationChecks || {}),
     },
   };

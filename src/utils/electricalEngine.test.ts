@@ -440,6 +440,55 @@ test('getEffectiveManufacturingInfo provides full nameplate data, piece verifica
   assert.ok(mfg.verificationChecks?.measuredPeResistanceOhm <= 0.1);
 });
 
+test('browser memory nameplate persistence saves and loads last nameplate and presets', async () => {
+  const {
+    saveLastNameplateToBrowserMemory,
+    loadLastNameplateFromBrowserMemory,
+    clearLastNameplateFromBrowserMemory,
+    saveNameplatePresetToBrowserMemory,
+    getSavedNameplatePresets,
+    deleteNameplatePresetFromBrowserMemory,
+  } = await import('./electricalEngine');
 
+  // Provide an in-memory localStorage mock for Node test environment
+  const store = new Map<string, string>();
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+    setItem: (k: string, v: string) => store.set(k, v),
+    removeItem: (k: string) => store.delete(k),
+  };
 
+  const baseMfg = getEffectiveManufacturingInfo(PROJECT_TEMPLATES.rodinny_dom_3f);
+  const customMfg = {
+    ...baseMfg,
+    manufacturerName: 'ELEKTRO MONTÁŽE KOVÁČ s.r.o.',
+    manufacturerIco: '55443322',
+    boardTitle: 'HLAVNÝ DOMOVÝ ROZVÁDZAČ (HDR)',
+    customRatedCurrentInA: '63 A',
+  };
 
+  saveLastNameplateToBrowserMemory(customMfg, 'large');
+  const loaded = loadLastNameplateFromBrowserMemory();
+  assert.ok(loaded);
+  assert.equal(loaded?.labelSize, 'large');
+  assert.equal(loaded?.info.manufacturerName, 'ELEKTRO MONTÁŽE KOVÁČ s.r.o.');
+  assert.equal(loaded?.info.boardTitle, 'HLAVNÝ DOMOVÝ ROZVÁDZAČ (HDR)');
+
+  // Verify getEffectiveManufacturingInfo picks up browser memory defaults for a fresh project
+  const merged = getEffectiveManufacturingInfo(PROJECT_TEMPLATES.byt_1f_230v);
+  assert.equal(merged.manufacturerName, 'ELEKTRO MONTÁŽE KOVÁČ s.r.o.');
+  assert.equal(merged.manufacturerIco, '55443322');
+  assert.equal(merged.customRatedCurrentInA, '63 A');
+
+  // Verify preset library in browser memory
+  const presetsAfterSave = saveNameplatePresetToBrowserMemory('Štítok RD Kováč', customMfg, 'standard');
+  assert.equal(presetsAfterSave.length, 1);
+  assert.equal(getSavedNameplatePresets()[0].presetName, 'Štítok RD Kováč');
+
+  const afterDelete = deleteNameplatePresetFromBrowserMemory(presetsAfterSave[0].id);
+  assert.equal(afterDelete.length, 0);
+
+  clearLastNameplateFromBrowserMemory();
+  assert.equal(loadLastNameplateFromBrowserMemory(), null);
+  delete (globalThis as any).localStorage;
+});
