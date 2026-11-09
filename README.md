@@ -34,9 +34,16 @@
 Cieľom projektu **Elektro Schema Generator PRO** je nahradiť zdĺhavé manuálne kreslenie schém v univerzálnych CAD programoch parametrickým návrhom: používateľ zadá vstupné parametre rozvádzača, ochranné prístroje a zoznam vývodov, a aplikácia v reálnom čase vygeneruje kompletnú výkresovú a výpočtovú dokumentáciu.
 
 ### Kľúčové vlastnosti
-- **Automatické generovanie schém (1-pólové a 3-pólové / 5-vodičové zobrazenie):**
-  - Dynamické vykresľovanie vektorovej schémy zapojenia pre jednofázové (**230 V, 1F**) a trojfázové (**400/230 V, 3F**) sústavy v sieťach **TN-C-S, TN-S, TN-C a TT**.
-  - Interaktívne plátno s podporou priblíženia (Zoom 50 % – 200 %), posúvania (Pan), prepínania orientácie zberníc, priameho inšpektora prvkov po kliknutí v schéme a pridávania prístrojov systémom Drag & Drop / Quick-Add.
+- **Automatické generovanie schém na 1 klik (Rýchle šablóny rozvádzačov):**
+  - Okamžité vytvorenie hotovej schémy pre Rodinný dom (3F 25A), 3-izbový byt (3F 25A), Garáž/Dielňu s Wallboxom EV 11 kW (3F 32A C) a Mestský byt (1F 230V 25A) s automatickým fázovým vyvážením a prechodom do CAD editora.
+- **Výrobný štítok rozvádzača (STN EN 61439-1 čl. 6.1 a STN EN 61439-3 pre DBO):**
+  - Parametrický priemyselný typový štítok na rozvádzač so značkou CE, výstražným bleskom a všetkými povinnými parametrami ($U_n$, $I_{nA}$, $I_{cn} = 10\text{ kA}$, krytie IP, trieda ochrany I/II, RDF).
+  - **Možnosť nahrať firemné logo namiesto názvu** (alebo vedľa názvu), s nastavením výšky loga a priamou tlačou na štítkovač / samolepiacu fóliu.
+- **Kompletná sprievodná výrobná dokumentácia výrobcu (Zákon č. 56/2018 Z. z.):**
+  - **Protokol o kusovom overení rozvádzača (čl. 11 STN EN 61439-1/3)**: 9 povinných overení (stupeň krytia IP, vzdialenosti, spojitosť PE $R_{pe} < 0{,}1\ \Omega$, uťahovacie momenty $2{,}0\text{--}2{,}5\text{ Nm}$, farebné značenie, izolačný odpor $R_{iso} > 50\text{ M}\Omega$ pri $500\text{ V DC}$, funkcia RCD chráničov $t_a < 300\text{ ms}$).
+  - **EÚ Vyhlásenie o zhode (CE Declaration of Conformity)** podľa NV SR 148/2016 Z. z. (LVD) a NV SR 127/2016 Z. z. (EMC).
+  - **Tepelná bilancia a výpočet oteplenia skrine** podľa STN EN 61439-1 čl. 10.10.4.2 a STN IEC TR 60890 s určením súdobosti RDF a bezpečnostnej rezervy v chladení.
+  - **8-krokový technologický postup výroby rozvádzača** od prípravy skrine až po odovzdanie na východiskovú revíziu OPaOS.
 - **Rozlíšenie dvoch samostatných hlavných prístrojov:**
   - **Hlavný istič pred elektromerom (`QF0`)** – istenie distribučnej spoločnosti v elektromerovom rozvádzači (RE).
   - **Hlavný prvok v rozvádzači (`QS1` / `QF1`)** – prístroj osadený priamo na 1. DIN lište rozvádzača s možnosťou výberu: *Hlavný vypínač (`QS1`)*, *Istič (`QF1`)*, *Odpínač (`QS1`)* alebo *Iný hlavný prvok*.
@@ -56,8 +63,8 @@ Cieľom projektu **Elektro Schema Generator PRO** je nahradiť zdĺhavé manuál
   - Konverzia neštruktúrovaného textového zoznamu alebo skopírovanej tabuľky z Excelu na kompletné elektrotechnické okruhy s interaktívnou tabuľkou náhľadu pred importom.
 - **2D a 3D vizualizácia skrine rozvádzača (DIN lišty TH35):**
   - Výpočet obsadenosti 18 mm modulov, kontrola normovej rezervy ($\ge 20\,\%$), 3D pohľad s dvierkami a tepelnou mapou (Thermal View).
-- **Exporty a tlačová dokumentácia:**
-  - Export schémy do **SVG**, **PNG (300 DPI)** a viacstranovej **tlačovej zostavy PDF (A4/A3)** s rohovou pečiatkou podľa **STN ISO 7200**, technickou správou, kusovníkom materiálu (**CSV / Excel**) a revíznym protokolom OPaOS.
+- **Exporty a tlačová dokumentácia (Biely technický CAD výkres):**
+  - Export schémy do **SVG**, **PNG (300 DPI)** a čistého **PDF (A4/A3/veľký formát)** bez tlačidiel rozhrania, s rohovou pečiatkou podľa **STN ISO 7200**, kusovníkom materiálu (**CSV / Excel**) a rozpisom ističov k okruhom.
 
 ---
 

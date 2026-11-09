@@ -22,6 +22,8 @@ import { ElectricalCalculatorView } from './components/ElectricalCalculatorView'
 import { DistributionBoard3DView } from './components/DistributionBoard3DView';
 import { ProfessionalExportView } from './components/ProfessionalExportView';
 import { AutoCircuitImportView } from './components/AutoCircuitImportView';
+import { SwitchboardManufacturingView } from './components/SwitchboardManufacturingView';
+import { AutoSchemaGeneratorModal } from './components/AutoSchemaGeneratorModal';
 import { exportCleanSchemaToPdf } from './utils/pdfSchemaExport';
 import {
   Zap,
@@ -47,6 +49,7 @@ import {
   Sparkles,
   FileCode2,
   Download,
+  Award,
 } from 'lucide-react';
 
 const STORAGE_KEY_PROJECTS = 'elektro_schema_pro_saved_projects_v3';
@@ -75,6 +78,12 @@ const PRIMARY_NAV_ITEMS: {
     label: 'Editor schémy',
     subtitle: 'Interaktívna 1P / 3P výkresová schéma',
     icon: Cpu,
+  },
+  {
+    id: 'manufacturing',
+    label: 'Výroba & Štítok',
+    subtitle: 'Výrobný štítok, kusová skúška a CE',
+    icon: Award,
   },
   {
     id: 'component-library',
@@ -172,6 +181,7 @@ export function App() {
   const [showAdvancedNav, setShowAdvancedNav] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [confirmResetModal, setConfirmResetModal] = useState<boolean>(false);
+  const [autoSchemaModalOpen, setAutoSchemaModalOpen] = useState<boolean>(false);
 
   // Sync activeProject into savedProjects & localStorage
   useEffect(() => {
@@ -487,11 +497,22 @@ export function App() {
 
             <button
               type="button"
+              onClick={() => setAutoSchemaModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-[#0066FF] to-blue-600 hover:from-blue-600 hover:to-[#0052CC] text-white text-xs font-bold shadow-md shadow-[#0066FF]/30 transition-all cursor-pointer"
+              title="Automaticky vytvoriť hotovú schému rozvádzača 1 klikom"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span className="hidden sm:inline">Automatické vytvorenie schémy</span>
+              <span className="sm:hidden">Auto schéma</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 handleProjectChange(activeProject, 'Manuálne uloženie projektu');
                 triggerToast('Projekt uložený');
               }}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm shadow-[#0066FF]/30 transition-all cursor-pointer"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-white text-xs font-bold border border-slate-700/80 transition-all cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Uložiť</span>
@@ -884,6 +905,14 @@ export function App() {
             </div>
           )}
 
+          {activeSection === 'manufacturing' && (
+            <SwitchboardManufacturingView
+              project={activeProject}
+              onProjectChange={handleProjectChange}
+              onNavigateToSchema={() => setActiveSection('schema-editor')}
+            />
+          )}
+
           {activeSection === 'validation' && (
             <SmartValidationAndComponentLibraryView
               mode="validation"
@@ -930,6 +959,17 @@ export function App() {
           )}
         </main>
       </div>
+
+      {/* AUTO SCHEMA GENERATOR MODAL */}
+      <AutoSchemaGeneratorModal
+        isOpen={autoSchemaModalOpen}
+        onClose={() => setAutoSchemaModalOpen(false)}
+        onGenerateProject={(newProj, desc) => {
+          handleSelectProject(newProj);
+          setActiveSection('schema-editor');
+          triggerToast('Schéma rozvádzača bola úspešne vytvorená');
+        }}
+      />
 
       {/* RESET CONFIRMATION MODAL */}
       {confirmResetModal && (

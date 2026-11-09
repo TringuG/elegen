@@ -24,6 +24,8 @@ import {
   ArrowRight,
   Layers,
   ShieldCheck,
+  Award,
+  Tag,
 } from 'lucide-react';
 import { NavigationSection, SwitchboardProject } from '../types/electrical';
 import {
@@ -233,6 +235,16 @@ export const DashboardAndProjectsView: React.FC<DashboardAndProjectsViewProps> =
             >
               <Cpu className="w-4 h-4 text-[#38BDF8]" />
               <span>Editor schémy</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigate('manufacturing')}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-white border border-slate-700 text-sm font-bold transition-all cursor-pointer"
+              title="Generovať výrobný štítok, protokol kusovej skúšky a CE vyhlásenie o zhode"
+            >
+              <Award className="w-4 h-4 text-amber-400" />
+              <span>Výroba &amp; Štítok</span>
             </button>
 
             <button

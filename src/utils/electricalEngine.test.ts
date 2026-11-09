@@ -13,6 +13,8 @@ import {
   suggestMainBreakerModel,
   suggestRcdModel,
   validateStnCompliance,
+  calculateThermalDissipation,
+  getEffectiveManufacturingInfo,
 } from './electricalEngine';
 
 test('suggestRcdModel differentiates between RCCB and RCBO models', () => {
@@ -411,6 +413,33 @@ test('validateStnCompliance detects internal-switch-overload, dual-breaker-selec
     missingOcIssues.some((i) => i.id === 'missing-main-overcurrent' && i.severity === 'error')
   );
 });
+
+test('calculateThermalDissipation computes power losses and verifies enclosure heat balance', () => {
+  const project = PROJECT_TEMPLATES.rodinny_dom_3f;
+  const result = calculateThermalDissipation(project);
+
+  assert.ok(result.totalLoss100PercentW > 0, 'Total nominal loss should be positive');
+  assert.ok(result.actualOperatingLossW > 0, 'Actual operating loss should be positive');
+  assert.ok(result.actualOperatingLossW <= result.totalLoss100PercentW, 'Operating loss with RDF should be <= 100% loss');
+  assert.ok(result.enclosureDissipationCapacityW > 0, 'Enclosure capacity should be positive');
+  assert.equal(result.isCompliant, true, 'Rodinny dom should comply with enclosure heat dissipation');
+  assert.equal(result.status, 'VYHOVUJE');
+  assert.ok(result.breakdown.length >= 4, 'Breakdown should list MCBs, RCDs, main device and wiring');
+});
+
+test('getEffectiveManufacturingInfo provides full nameplate data, piece verification protocol, and logo support', () => {
+  const project = PROJECT_TEMPLATES.rodinny_dom_3f;
+  const mfg = getEffectiveManufacturingInfo(project);
+
+  assert.ok(mfg.manufacturerName.length > 0);
+  assert.ok(mfg.serialNumber.startsWith('SN-'));
+  assert.ok(mfg.typeDesignation.startsWith('DBO-'));
+  assert.ok(mfg.verificationChecks);
+  assert.equal(mfg.verificationChecks?.overallPieceVerificationResult, 'VYHOVUJE');
+  assert.ok(mfg.verificationChecks?.measuredInsulationResistanceMohm >= 50);
+  assert.ok(mfg.verificationChecks?.measuredPeResistanceOhm <= 0.1);
+});
+
 
 
 

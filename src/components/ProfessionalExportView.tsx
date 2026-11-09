@@ -8,6 +8,7 @@ import {
   getEffectiveUpstreamBreaker,
   getEffectiveElectricityMeter,
   getEffectiveInternalDevice,
+  getEffectiveManufacturingInfo,
 } from '../utils/electricalEngine';
 import { ElectricalSchemaCanvas } from './ElectricalSchemaCanvas';
 import {
@@ -51,6 +52,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
     symbolLegend: false,
     calculationReport: false,
     validationProtocol: false,
+    manufacturingLabel: false,
   });
 
   const [settingsSavedBanner, setSettingsSavedBanner] = useState(false);
@@ -218,6 +220,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
   const upstream = getEffectiveUpstreamBreaker(project);
   const meter = getEffectiveElectricityMeter(project);
   const internalDev = getEffectiveInternalDevice(project);
+  const mfg = getEffectiveManufacturingInfo(project);
 
   const toggleSection = (key: keyof typeof includedSections) => {
     setIncludedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -462,6 +465,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
                     symbolLegend: false,
                     calculationReport: false,
                     validationProtocol: false,
+                    manufacturingLabel: false,
                   })
                 }
                 className="px-3 py-1 rounded-lg bg-[#0066FF] text-white font-bold cursor-pointer hover:bg-[#0052CC] transition-colors"
@@ -481,6 +485,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
                     symbolLegend: true,
                     calculationReport: true,
                     validationProtocol: true,
+                    manufacturingLabel: true,
                   })
                 }
                 className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors"
@@ -500,6 +505,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
               { key: 'technicalDescription' as const, label: 'Technická sprievodná správa' },
               { key: 'symbolLegend' as const, label: 'Legenda značiek STN EN 60617' },
               { key: 'validationProtocol' as const, label: 'Protokol kontroly a revízie' },
+              { key: 'manufacturingLabel' as const, label: 'Výrobný štítok (STN EN 61439-3)' },
             ].map((sec) => {
               const active = includedSections[sec.key];
               return (
@@ -896,6 +902,64 @@ export const ProfessionalExportView: React.FC<Props> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* 9. Manufacturing Nameplate (Výrobný štítok STN EN 61439-3) */}
+        {includedSections.manufacturingLabel && (
+          <section className="space-y-2.5 break-inside-avoid">
+            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+              Výrobný štítok rozvádzača (STN EN 61439-1 čl. 6.1 a STN EN 61439-3)
+            </h3>
+            <div className="border-4 border-slate-950 p-4 max-w-md bg-white rounded font-mono text-[10.5px]">
+              <div className="flex items-start justify-between border-b-2 border-slate-950 pb-2 mb-2">
+                <div className="max-w-[240px]">
+                  {mfg.manufacturerLogoUrl && mfg.logoDisplayMode !== 'text_only' ? (
+                    <div className="mb-1">
+                      {mfg.logoDisplayMode === 'logo_only' ? (
+                        <img
+                          src={mfg.manufacturerLogoUrl}
+                          alt="Logo výrobcu"
+                          style={{ maxHeight: `${(mfg.logoHeightMm || 14) * 2}px` }}
+                          className="object-contain max-w-[200px]"
+                        />
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <img
+                            src={mfg.manufacturerLogoUrl}
+                            alt="Logo výrobcu"
+                            style={{ maxHeight: `${(mfg.logoHeightMm || 14) * 1.5}px` }}
+                            className="object-contain max-w-[100px]"
+                          />
+                          <div className="font-extrabold font-sans uppercase text-[11px] text-slate-950">
+                            {mfg.manufacturerName}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="font-extrabold font-sans uppercase text-xs text-slate-950">
+                      {mfg.manufacturerName}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-slate-700">{mfg.manufacturerStreet}, {mfg.manufacturerCity}</div>
+                  <div className="text-[9px] text-slate-600">IČO: {mfg.manufacturerIco}</div>
+                </div>
+                <div className="font-serif font-black text-2xl border-2 border-slate-950 px-2 py-0.5 rounded">CE</div>
+              </div>
+              <div className="text-center font-sans font-bold uppercase text-[10px] pb-1 border-b border-slate-950">
+                ROZVODNICA PRE LAICKÚ OBSLUHU (DBO)
+              </div>
+              <div className="divide-y divide-slate-300 py-1">
+                <div className="flex justify-between py-0.5"><span>Typ:</span><strong>{mfg.typeDesignation}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Sériové číslo:</span><strong>{mfg.serialNumber}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Napätie Un:</span><strong>{project.supplySystem === '3f' ? '230/400 V AC' : '230 V AC'}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Menovitý prúd InA:</span><strong>{internalDev.enabled ? `${internalDev.ratedCurrent} A` : '40 A'}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Skratová odolnosť Icn:</span><strong>{mfg.ratedShortCircuitIcnKa || 10} kA</strong></div>
+                <div className="flex justify-between py-0.5"><span>Krytie / Trieda:</span><strong>{project.ipRating} / {mfg.enclosureProtectionClass}</strong></div>
+                <div className="flex justify-between py-0.5"><span>Norma:</span><strong>STN EN 61439-3:2012</strong></div>
+              </div>
             </div>
           </section>
         )}

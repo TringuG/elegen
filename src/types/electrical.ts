@@ -181,6 +181,53 @@ export interface VerificationChecklistState {
   onSiteRevisionRequiredAcknowledged: boolean;
 }
 
+export interface PieceVerificationChecks {
+  ipRatingChecked: boolean;
+  clearanceAndCreepageOk: boolean;
+  peContinuityOk: boolean;
+  measuredPeResistanceOhm: number; // napr. 0.03 Ohm (max 0.1 Ohm)
+  componentsInstallationOk: boolean;
+  tighteningTorquesVerified: boolean;
+  internalWiringAndCrossSectionsOk: boolean;
+  wireColorCodingStnOk: boolean; // L1 hnedá/čierna, L2 čierna, L3 sivá, N modrá, PE zel-žltá
+  externalTerminalsChecked: boolean;
+  mechanicalOperationOk: boolean; // dvierka, páčky, západky
+  insulationResistanceOk: boolean;
+  testVoltageV: number; // 500 V DC
+  measuredInsulationResistanceMohm: number; // napr. > 50 MOhm (min. 1.0 MOhm)
+  electricalFunctionAndRcdTestOk: boolean;
+  measuredRcdTripTimeMs: number; // napr. 22 ms (max 300 ms)
+  overallPieceVerificationResult: 'VYHOVUJE' | 'NEVYHOVUJE';
+}
+
+export interface SwitchboardManufacturerInfo {
+  manufacturerName: string;
+  manufacturerStreet: string;
+  manufacturerCity: string;
+  manufacturerIco: string;
+  manufacturerDic?: string;
+  manufacturerPhone?: string;
+  manufacturerEmail?: string;
+  technicianName: string;
+  technicianCertificateNumber?: string; // Číslo osvedčenia elektrotechnika (§ 22 / § 23 / § 24)
+  serialNumber: string; // Výrobné číslo
+  productionYear: number;
+  typeDesignation: string; // Typové označenie rozvádzača, napr. DBO-RD-01
+  testedDate: string;
+  measurementDeviceModel: string; // napr. Metrel MI 3152 EurotestXC
+  measurementDeviceSerial: string;
+  calibrationValidUntil: string;
+  enclosureProtectionClass: 'Trieda I (s PE svorkou)' | 'Trieda II (dvojitá izolácia / celoplast)';
+  ratedDiversityFactor: number; // RDF napr. 0.8
+  ambientTempRange: string; // napr. -5 °C až +40 °C
+  ratedShortCircuitIcnKa: number; // napr. 6 kA alebo 10 kA
+  manufacturerLogoUrl?: string; // Base64 Data URL alebo URL adresa firemného loga
+  logoDisplayMode?: 'text_only' | 'logo_only' | 'both'; // Zobrazenie na výrobnom štítku
+  logoHeightMm?: number; // Výška loga na štítku (napr. 12 až 24 mm)
+  notes?: string;
+  verificationChecks?: PieceVerificationChecks;
+}
+
 export interface SwitchboardProject {
   id: string;
   name: string;
@@ -206,6 +253,7 @@ export interface SwitchboardProject {
   circuits: CircuitConfig[];
   history?: ProjectHistoryEntry[];
   verificationChecklist?: VerificationChecklistState;
+  manufacturingInfo?: SwitchboardManufacturerInfo;
   notes?: string;
 }
 
@@ -312,8 +360,9 @@ export type NavigationSection =
   | 'new-project'
   | 'smart-designer' // 2. Nový rozvádzač (6-krokový sprievodca)
   | 'schema-editor' // 3. Editor schémy
-  | 'component-library' // 4. Komponenty
-  | 'documentation' // 5. Dokumentácia a export
+  | 'manufacturing' // 4. Výroba rozvádzača & Štítok (Kusová skúška, Štítok, DoC, Oteplenie)
+  | 'component-library' // 5. Komponenty
+  | 'documentation' // 6. Dokumentácia a export
   | 'advanced-settings' // ROZŠÍRENÉ NASTAVENIA
   | 'auto-import'
   | 'board-3d'
