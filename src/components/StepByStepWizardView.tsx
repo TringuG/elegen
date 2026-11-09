@@ -49,6 +49,7 @@ import {
 } from '../utils/electricalEngine';
 import { AutoCircuitImportView } from './AutoCircuitImportView';
 import { ElectricalSchemaCanvas } from './ElectricalSchemaCanvas';
+import { exportCleanSchemaToPdf } from '../utils/pdfSchemaExport';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -58,6 +59,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   Edit3,
   FileSpreadsheet,
   FileText,
@@ -373,7 +375,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
   return (
     <div className="space-y-6">
       {/* STEP PROGRESS INDICATOR — DEEP NAVY HEADER + ELECTRIC BLUE STEP PILLS */}
-      <div className="bg-[#0B1120] text-white rounded-2xl border border-slate-800 p-5 shadow-md">
+      <div className="no-print bg-[#0B1120] text-white rounded-2xl border border-slate-800 p-5 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3.5">
           <div>
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#38BDF8]">
@@ -2724,37 +2726,46 @@ export const StepByStepWizardView: React.FC<Props> = ({
       {/* ===================================================================== */}
       {activeStep === 6 && (
         <div className="space-y-5">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="no-print bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-base font-bold text-slate-900">
                 KROK 6 – VÝSLEDNÁ SCHÉMA A KONTROLA NÁVRHU
               </h3>
               <p className="text-sm text-slate-500">
-                Vaša elektrická schéma je pripravená. Skontrolujte súlad s STN normami a stiahnite si PDF dokumentáciu.
+                Vaša elektrická schéma je pripravená. Skontrolujte súlad s STN normami a vytlačte si čistú schému s rozpisom ističov.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={onOpenFullEditor}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
               >
                 <Layers className="w-4 h-4 text-blue-600" />
                 OTVORIŤ EDITOR SCHÉMY
               </button>
               <button
                 type="button"
+                onClick={() => exportCleanSchemaToPdf(project, { displayMode, paperFormat: 'A3' })}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
+              >
+                <Download className="w-4 h-4" />
+                STIAHNUŤ PDF (SCHÉMA + ISTIČE)
+              </button>
+              <button
+                type="button"
                 onClick={onOpenExport}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm transition-colors"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#0052CC] text-white text-sm font-bold shadow-sm transition-colors cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
-                DOKUMENTÁCIA A EXPORT PDF
+                DOKUMENTÁCIA A KUSOVNÍK
               </button>
             </div>
           </div>
 
           {/* Simple Status Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="no-print grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3">
               <CheckCircle2 className="w-7 h-7 text-emerald-600 shrink-0" />
               <div>
@@ -2807,7 +2818,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
           </div>
 
           {/* Embedded Full Schematic Preview */}
-          <div className="h-[680px]">
+          <div className="h-[680px] print:h-auto">
             <ElectricalSchemaCanvas
               project={project}
               displayMode={displayMode}
@@ -2819,7 +2830,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
       )}
 
       {/* BOTTOM WIZARD NAVIGATION BUTTONS */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
+      <div className="no-print bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
         <button
           type="button"
           disabled={activeStep === 1}
@@ -2827,7 +2838,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
           className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
             activeStep === 1
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-800 cursor-pointer'
           }`}
         >
           <ArrowLeft className="w-4 h-4" />
@@ -2842,7 +2853,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => setActiveStep((s) => Math.min(6, s + 1))}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#0052CC] text-white text-sm font-bold shadow-sm transition-all cursor-pointer"
           >
             Ďalší krok: {WIZARD_STEPS[activeStep].title}
             <ArrowRight className="w-4 h-4" />
@@ -2851,7 +2862,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
           <button
             type="button"
             onClick={onOpenExport}
-            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-sm transition-all cursor-pointer"
           >
             <FileText className="w-4 h-4" />
             Prejsť na PDF Export a Kusovník

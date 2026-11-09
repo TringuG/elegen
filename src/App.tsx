@@ -22,6 +22,7 @@ import { ElectricalCalculatorView } from './components/ElectricalCalculatorView'
 import { DistributionBoard3DView } from './components/DistributionBoard3DView';
 import { ProfessionalExportView } from './components/ProfessionalExportView';
 import { AutoCircuitImportView } from './components/AutoCircuitImportView';
+import { exportCleanSchemaToPdf } from './utils/pdfSchemaExport';
 import {
   Zap,
   FolderKanban,
@@ -45,6 +46,7 @@ import {
   Activity,
   Sparkles,
   FileCode2,
+  Download,
 } from 'lucide-react';
 
 const STORAGE_KEY_PROJECTS = 'elektro_schema_pro_saved_projects_v3';
@@ -693,7 +695,7 @@ export function App() {
         </aside>
 
         {/* RIGHT LIGHT WORKSPACE AREA — CRISP LIGHT BACKGROUND (#F1F5F9) */}
-        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 bg-[#F1F5F9] text-slate-900 overflow-x-hidden">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 print:p-0 bg-[#F1F5F9] print:bg-white text-slate-900 overflow-x-hidden print:overflow-visible">
           {activeSection === 'dashboard' && (
             <DashboardAndProjectsView
               mode="dashboard"
@@ -739,7 +741,7 @@ export function App() {
           )}
 
           {activeSection === 'schema-editor' && (
-            <div className="space-y-4">
+            <div className="space-y-5 print:space-y-0">
               {/* Top Technical Bar for Full-Screen Schema Editor */}
               <div className="no-print bg-[#0B1120] text-white rounded-2xl p-4 sm:px-6 border border-slate-800 shadow-sm flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -756,7 +758,7 @@ export function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400">
-                      Jednopólové a viacpólové zapojenie • Kliknite na ľubovoľný istič, chránič alebo hlavný prvok pre okamžitú úpravu
+                      Jednopólové a viacpólové zapojenie • Tlačidlo „Tlač / PDF“ vytlačí čisto schému a k nej rozpis ističov a okruhov
                     </p>
                   </div>
                 </div>
@@ -771,21 +773,113 @@ export function App() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => exportCleanSchemaToPdf(activeProject, { displayMode, paperFormat: 'A3' })}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                    title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Stiahnuť PDF (Schéma + Ističe)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveSection('documentation')}
                     className="px-4 py-2 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                   >
-                    Exportovať dokumentáciu a PDF
+                    Dokumentácia a kusovník
                   </button>
                 </div>
               </div>
 
-              <div className="h-[780px] bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="h-[740px] print:h-auto bg-white rounded-2xl border border-slate-200 print:border-0 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
                 <ElectricalSchemaCanvas
                   project={activeProject}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
                   onProjectChange={handleProjectChange}
                 />
+              </div>
+
+              {/* On-Screen Breaker-to-Circuit Legend Card (Hidden in print because ElectricalSchemaCanvas prints its own compact table) */}
+              <div className="no-print bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">
+                      Popis k schéme — Ktorý okruh je na ktorom ističi ({activeProject.circuits.length} vývodov)
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Tento prehľad sa automaticky vytlačí pod čistou schémou pri kliknutí na „Tlač / PDF (Schéma + Ističe)“.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 font-bold">
+                      {upstream.designation}: {upstream.enabled ? `${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent}A` : 'Nezahrnutý'}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-[#0066FF] font-bold">
+                      {internalDev.designation}: {internalDev.enabled ? `${internalDev.deviceType} (${internalDev.poles} ${internalDev.ratedCurrent}A)` : 'Neosadený'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-mono uppercase text-slate-500">
+                        <th className="py-2 px-3">Istič v schéme</th>
+                        <th className="py-2 px-3">Ktorý okruh / spotrebič je na ističi</th>
+                        <th className="py-2 px-3">Typ a hodnota ističa</th>
+                        <th className="py-2 px-3">Prúdový chránič</th>
+                        <th className="py-2 px-3">Fáza</th>
+                        <th className="py-2 px-3">Kábel a prierez</th>
+                        <th className="py-2 px-3 text-right">Príkon</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {activeProject.circuits.map((c) => {
+                        const rcd = activeProject.rcds.find((r) => r.id === c.rcdId);
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 font-bold text-[#0066FF]">{c.label}</td>
+                            <td className="py-2 px-3 font-sans font-bold text-slate-900">{c.name}</td>
+                            <td className="py-2 px-3 font-bold text-slate-800">
+                              {c.poles} {c.characteristic}{c.ratedCurrent} A ({c.model})
+                            </td>
+                            <td className="py-2 px-3 text-slate-700">
+                              {rcd ? `${rcd.label} (${rcd.ratedCurrent}A/${rcd.sensitivity}mA)` : 'Bez FI (priamo)'}
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800">{c.phase}</td>
+                            <td className="py-2 px-3 text-emerald-700 font-semibold">{c.cable}</td>
+                            <td className="py-2 px-3 text-right text-slate-700">{c.powerKw.toFixed(2)} kW</td>
+                          </tr>
+                        );
+                      })}
+                      {activeProject.rcds
+                        .filter((r) => r.deviceKind === 'RCBO' && !activeProject.circuits.some((c) => c.rcdId === r.id))
+                        .map((rcbo) => (
+                          <tr key={rcbo.id} className="hover:bg-slate-50">
+                            <td className="py-2 px-3 font-bold text-amber-600">{rcbo.label}</td>
+                            <td className="py-2 px-3 font-sans font-bold text-slate-900">
+                              {rcbo.circuitName || rcbo.notes || 'Samostatný okruh RCBO'}
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800">
+                              RCBO {rcbo.poles} {rcbo.characteristic || 'B'}{rcbo.ratedCurrent} A ({rcbo.model})
+                            </td>
+                            <td className="py-2 px-3 text-slate-700">
+                              Integrovaný ističochránič ({rcbo.sensitivity}mA, Typ {rcbo.type})
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800">
+                              {rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1')}
+                            </td>
+                            <td className="py-2 px-3 text-emerald-700 font-semibold">
+                              {rcbo.cableType || 'CYKY-J 3x2,5 mm²'}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-700">
+                              {(rcbo.powerKw ?? 0.6).toFixed(2)} kW
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}

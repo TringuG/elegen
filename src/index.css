@@ -51,13 +51,47 @@
 @media print {
   @page {
     size: A3 landscape;
-    margin: 10mm;
+    margin: 8mm;
   }
-  body {
+  html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .no-print {
     display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .schema-canvas-root {
+    height: auto !important;
+    border: none !important;
+    background: transparent !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  .schema-canvas-viewport {
+    overflow: visible !important;
+    height: auto !important;
+    background: none !important;
+    background-image: none !important;
+  }
+  .schema-canvas-transform {
+    transform: none !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+  .schema-canvas-svg {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
   }
 }

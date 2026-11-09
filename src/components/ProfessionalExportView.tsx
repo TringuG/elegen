@@ -11,6 +11,10 @@ import {
 } from '../utils/electricalEngine';
 import { ElectricalSchemaCanvas } from './ElectricalSchemaCanvas';
 import {
+  exportCleanSchemaToPdf,
+  exportCleanSchemaToPng,
+} from '../utils/pdfSchemaExport';
+import {
   FileText,
   Printer,
   Download,
@@ -40,16 +44,17 @@ export const ProfessionalExportView: React.FC<Props> = ({
   const [includedSections, setIncludedSections] = useState({
     singleLineSchema: true,
     multiLineSchema: false,
-    wiringDiagram: true,
-    bom: true,
+    wiringDiagram: false,
+    bom: false,
     circuitList: true,
-    technicalDescription: true,
-    symbolLegend: true,
-    calculationReport: true,
-    validationProtocol: true,
+    technicalDescription: false,
+    symbolLegend: false,
+    calculationReport: false,
+    validationProtocol: false,
   });
 
   const [settingsSavedBanner, setSettingsSavedBanner] = useState(false);
+  const [exportStatusBanner, setExportStatusBanner] = useState<string | null>(null);
 
   // ===========================================================================
   // SCREEN 13: NASTAVENIA APLIKÁCIE (LIGHT TECHNICAL DESIGN)
@@ -218,6 +223,39 @@ export const ProfessionalExportView: React.FC<Props> = ({
     setIncludedSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleExportPdfFile = async () => {
+    setExportStatusBanner(
+      'Generujem čistý PDF dokument (elektrická schéma + rozpis ističov a okruhov)...'
+    );
+    try {
+      await exportCleanSchemaToPdf(project, {
+        paperFormat,
+        includeBom: includedSections.bom,
+        includeTechnicalReport: includedSections.technicalDescription,
+      });
+      setExportStatusBanner(
+        `PDF výkres (${project.projectNumber}_Schema_a_Istice.pdf) bol úspešne vygenerovaný a stiahnutý.`
+      );
+    } catch {
+      window.print();
+      setExportStatusBanner('Otvorené okno tlače / uloženia PDF.');
+    }
+    setTimeout(() => setExportStatusBanner(null), 5000);
+  };
+
+  const handleExportPngFile = async () => {
+    setExportStatusBanner('Generujem čistý PNG výkres (elektrická schéma + rozpis ističov)...');
+    try {
+      await exportCleanSchemaToPng(project, { paperFormat });
+      setExportStatusBanner(
+        `PNG výkres (${project.projectNumber}_Schema_a_Istice.png) bol úspešne stiahnutý.`
+      );
+    } catch {
+      setExportStatusBanner(null);
+    }
+    setTimeout(() => setExportStatusBanner(null), 5000);
+  };
+
   const handlePrintPdf = () => {
     window.print();
   };
@@ -350,7 +388,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleExportBomCsv}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-[#38BDF8]" />
               Kusovník CSV
@@ -359,7 +397,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
             <button
               type="button"
               onClick={handleExportCircuitTableCsv}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
               Okruhy CSV
@@ -367,27 +405,98 @@ export const ProfessionalExportView: React.FC<Props> = ({
 
             <button
               type="button"
-              onClick={handlePrintPdf}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white font-bold text-xs shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer"
+              onClick={handleExportPngFile}
+              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
+              title="Stiahnuť čistú schému + rozpis ističov ako obrázok PNG"
             >
-              <Printer className="w-4 h-4" />
-              Tlačiť / Uložiť PDF ({paperFormat})
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              Export PNG
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPdfFile}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white font-bold text-xs shadow-lg shadow-[#0066FF]/30 transition-all cursor-pointer"
+              title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
+            >
+              <Download className="w-4 h-4" />
+              Exportovať / Stiahnuť PDF ({paperFormat})
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrintPdf}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
+              title="Vytlačiť na tlačiarni"
+            >
+              <Printer className="w-4 h-4 text-slate-300" />
+              Tlačiť
             </button>
           </div>
         </div>
 
-        {/* Section Toggles Card */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5">
-            Zahrnuté prílohy v tlačovej zostave dokumentácie:
+        {exportStatusBanner && (
+          <div className="px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-2 shadow-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{exportStatusBanner}</span>
           </div>
+        )}
+
+        {/* Section Toggles Card */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              Čo sa má vytlačiť / exportovať do PDF:
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() =>
+                  setIncludedSections({
+                    singleLineSchema: true,
+                    multiLineSchema: false,
+                    wiringDiagram: false,
+                    bom: false,
+                    circuitList: true,
+                    technicalDescription: false,
+                    symbolLegend: false,
+                    calculationReport: false,
+                    validationProtocol: false,
+                  })
+                }
+                className="px-3 py-1 rounded-lg bg-[#0066FF] text-white font-bold cursor-pointer hover:bg-[#0052CC] transition-colors"
+              >
+                Čisto schéma + popis ističov a okruhov (Odporúčané)
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setIncludedSections({
+                    singleLineSchema: true,
+                    multiLineSchema: false,
+                    wiringDiagram: true,
+                    bom: true,
+                    circuitList: true,
+                    technicalDescription: true,
+                    symbolLegend: true,
+                    calculationReport: true,
+                    validationProtocol: true,
+                  })
+                }
+                className="px-3 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold border border-slate-200 cursor-pointer hover:bg-slate-200 transition-colors"
+              >
+                Kompletná projektová dokumentácia (Všetky prílohy)
+              </button>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2 text-xs">
             {[
               { key: 'singleLineSchema' as const, label: 'Jednopólová schéma' },
               { key: 'multiLineSchema' as const, label: 'Viacpólová schéma' },
-              { key: 'wiringDiagram' as const, label: 'Schéma zapojenia rozvádzača' },
+              { key: 'circuitList' as const, label: 'Popis okruhov (Ktorý okruh je na ktorom ističi)' },
               { key: 'bom' as const, label: 'Výkaz materiálu (Kusovník BOM)' },
-              { key: 'circuitList' as const, label: 'Zoznam okruhov a výpočty' },
+              { key: 'wiringDiagram' as const, label: 'Schéma zapojenia PE / N' },
               { key: 'technicalDescription' as const, label: 'Technická sprievodná správa' },
               { key: 'symbolLegend' as const, label: 'Legenda značiek STN EN 60617' },
               { key: 'validationProtocol' as const, label: 'Protokol kontroly a revízie' },
@@ -420,12 +529,12 @@ export const ProfessionalExportView: React.FC<Props> = ({
       {/* ===================================================================== */}
       {/* PRINTABLE / EXPORTABLE ENGINEERING DOSSIER SHEET (CRISP WHITE PAPER)  */}
       {/* ===================================================================== */}
-      <div className="bg-white text-slate-900 rounded-2xl border border-slate-300 shadow-sm p-6 sm:p-8 space-y-8 print:border-0 print:shadow-none print:p-0">
+      <div className="bg-white text-slate-900 rounded-2xl border border-slate-300 shadow-sm p-6 sm:p-8 space-y-6 print:border-0 print:shadow-none print:p-0">
         {/* Document Header Banner */}
-        <div className="border-2 border-slate-900 p-5 flex flex-wrap items-center justify-between gap-4 bg-slate-50">
+        <div className="border-2 border-slate-900 p-4 flex flex-wrap items-center justify-between gap-4 bg-slate-50">
           <div>
             <div className="text-[11px] font-mono uppercase tracking-widest text-[#0066FF] font-bold">
-              PROJEKTOVÁ DOKUMENTÁCIA ELEKTROINŠTALÁCIE • STN EN 61439-3 / STN EN 61082-1
+              ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-0.5">
               {project.name}
@@ -465,7 +574,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {includedSections.technicalDescription && (
           <section className="space-y-2.5">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              1. Technická sprievodná správa
+              Technická sprievodná správa
             </h3>
             <div className="text-xs text-slate-700 leading-relaxed space-y-2">
               <p>
@@ -506,9 +615,9 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {includedSections.singleLineSchema && (
           <section className="space-y-2.5 break-inside-avoid">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              2. Jednopólová schéma rozvádzača
+              Jednopólová schéma rozvádzača
             </h3>
-            <div className="h-[520px] border border-slate-300 rounded-xl overflow-hidden">
+            <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">
               <ElectricalSchemaCanvas
                 project={project}
                 displayMode="single-line"
@@ -523,9 +632,9 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {includedSections.multiLineSchema && (
           <section className="space-y-2.5 break-inside-avoid">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              3. Viacpólová schéma rozvádzača (L1, L2, L3, N, PE)
+              Viacpólová schéma rozvádzača (L1, L2, L3, N, PE)
             </h3>
-            <div className="h-[540px] border border-slate-300 rounded-xl overflow-hidden">
+            <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">
               <ElectricalSchemaCanvas
                 project={project}
                 displayMode="multi-line"
@@ -540,9 +649,9 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {includedSections.wiringDiagram && (
           <section className="space-y-2.5 break-inside-avoid">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              4. Schéma vnútorného zapojenia a prípojníc PE / N
+              Schéma vnútorného zapojenia a prípojníc PE / N
             </h3>
-            <div className="h-[520px] border border-slate-300 rounded-xl overflow-hidden">
+            <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">
               <ElectricalSchemaCanvas
                 project={project}
                 displayMode="wiring-diagram"
@@ -557,16 +666,16 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {includedSections.circuitList && (
           <section className="space-y-2.5 break-inside-avoid">
             <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              5. Tabuľka elektrických okruhov a výpočtových parametrov
+              Rozpis ističov a elektrických okruhov (Ktorý okruh je na ktorom ističi)
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse border border-slate-300 text-[11px]">
                 <thead>
                   <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                    <th className="py-2 px-2.5 border-r border-slate-300">Ozn.</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Názov okruhu</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">RCD</th>
                     <th className="py-2 px-2.5 border-r border-slate-300">Istič</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300">Názov okruhu / Spotrebič</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300">Typ a hodnota ističa</th>
+                    <th className="py-2 px-2.5 border-r border-slate-300">Chránič (RCD)</th>
                     <th className="py-2 px-2.5 border-r border-slate-300">Fáza</th>
                     <th className="py-2 px-2.5 border-r border-slate-300">Kábel / Dĺžka</th>
                     <th className="py-2 px-2.5 border-r border-slate-300">Príkon P</th>
@@ -587,14 +696,14 @@ export const ProfessionalExportView: React.FC<Props> = ({
                         <td className="py-1.5 px-2.5 border-r border-slate-300 font-sans font-semibold text-slate-900">
                           {c.name}
                         </td>
-                        <td className="py-1.5 px-2.5 border-r border-slate-300">
-                          {rcd ? rcd.label : 'Bez RCD'}
-                        </td>
                         <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold">
                           {c.poles} {c.breakerChar}
-                          {c.breakerCurrentIn}A
+                          {c.breakerCurrentIn} A ({circ?.model || ''})
                         </td>
-                        <td className="py-1.5 px-2.5 border-r border-slate-300">{c.phase}</td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300">
+                          {rcd ? `${rcd.label} (${rcd.ratedCurrent}A/${rcd.sensitivity}mA)` : 'Bez RCD'}
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold">{c.phase}</td>
                         <td className="py-1.5 px-2.5 border-r border-slate-300">
                           {c.cableText} ({c.lengthM}m)
                         </td>
@@ -621,6 +730,41 @@ export const ProfessionalExportView: React.FC<Props> = ({
                       </tr>
                     );
                   })}
+                  {project.rcds
+                    .filter((r) => r.deviceKind === 'RCBO' && !project.circuits.some((c) => c.rcdId === r.id))
+                    .map((rcbo) => (
+                      <tr key={rcbo.id}>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold text-amber-600">
+                          {rcbo.label}
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-sans font-semibold text-slate-900">
+                          {rcbo.circuitName || rcbo.notes || 'Samostatný okruh RCBO'}
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold">
+                          RCBO {rcbo.poles} {rcbo.characteristic || 'B'}
+                          {rcbo.ratedCurrent} A ({rcbo.model})
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300">
+                          RCBO {rcbo.sensitivity}mA (Typ {rcbo.type})
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold">
+                          {rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1')}
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300">
+                          {rcbo.cableType || 'CYKY-J 3x2,5 mm²'} ({rcbo.cableLengthM || 15}m)
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300">
+                          {(rcbo.powerKw ?? 0.6).toFixed(2)} kW
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300">
+                          {(((rcbo.powerKw ?? 0.6) * 1000) / 230).toFixed(2)}A / 24A
+                        </td>
+                        <td className="py-1.5 px-2.5 border-r border-slate-300 font-bold text-slate-900">
+                          0.35%
+                        </td>
+                        <td className="py-1.5 px-2.5 font-bold text-slate-900">0.52 Ω</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>

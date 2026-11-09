@@ -21,6 +21,10 @@ import {
   INTERNAL_DEVICE_CURRENTS,
 } from '../utils/electricalEngine';
 import {
+  exportCleanSchemaToPdf,
+  exportCleanSchemaToPng,
+} from '../utils/pdfSchemaExport';
+import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -146,7 +150,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
   });
 
   const canvasWidth = Math.max(1260, currentX + 140);
-  const canvasHeight = displayMode === 'wiring-diagram' ? 965 : 895;
+  const canvasHeight = displayMode === 'wiring-diagram' ? 1010 : 940;
 
   // Busbar Y coordinates shifted to give generous space to QF0 -> Elektromer -> Prívod -> QS1/QF1
   const busY_L1 = 278;
@@ -178,20 +182,58 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
   const handleExportSvg = () => {
     if (!svgRef.current) return;
+    const clone = svgRef.current.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(canvasWidth));
+    clone.setAttribute('height', String(canvasHeight));
     const serializer = new XMLSerializer();
-    let source = serializer.serializeToString(svgRef.current);
-    if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
-      source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
-    }
+    const source = serializer.serializeToString(clone);
     const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
     const svgUrl = URL.createObjectURL(svgBlob);
     const downloadLink = document.createElement('a');
     downloadLink.href = svgUrl;
-    downloadLink.download = `${project.name.replace(/\s+/g, '_')}_${displayMode}.svg`;
+    const safeProjectNo = (project.projectNumber || 'rozvadzac').replace(/[^a-zA-Z0-9_-]/g, '_');
+    downloadLink.download = `${safeProjectNo}_Schema_${displayMode}.svg`;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(svgUrl);
+    setTimeout(() => URL.revokeObjectURL(svgUrl), 2000);
+    setAutoRouteStatus('Čistá vektorová schéma (SVG) bola úspešne stiahnutá.');
+    setTimeout(() => setAutoRouteStatus(null), 4000);
+  };
+
+  const handleExportPdf = async () => {
+    setAutoRouteStatus('Generujem čistý PDF výkres (elektrická schéma + rozpis ističov a okruhov)...');
+    try {
+      await exportCleanSchemaToPdf(project, {
+        svgElement: svgRef.current,
+        displayMode,
+        paperFormat: 'A3',
+      });
+      setAutoRouteStatus(
+        'PDF výkres (čisto schéma + popis ktorý okruh je na ktorom ističi) bol úspešne stiahnutý.'
+      );
+    } catch {
+      window.print();
+      setAutoRouteStatus('Otvorené okno tlače / PDF.');
+    }
+    setTimeout(() => setAutoRouteStatus(null), 4500);
+  };
+
+  const handleExportPng = async () => {
+    setAutoRouteStatus('Generujem čistý PNG výkres (elektrická schéma + rozpis ističov a okruhov)...');
+    try {
+      await exportCleanSchemaToPng(project, {
+        svgElement: svgRef.current,
+        displayMode,
+      });
+      setAutoRouteStatus(
+        'PNG výkres (čisto schéma + popis ktorý okruh je na ktorom ističi) bol úspešne stiahnutý.'
+      );
+    } catch {
+      setAutoRouteStatus(null);
+    }
+    setTimeout(() => setAutoRouteStatus(null), 4500);
   };
 
   const handleAutoAlignAndRoute = () => {
@@ -356,148 +398,172 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
       : null;
 
   return (
-    <div className="flex flex-col h-full bg-[#0B1120] rounded-xl border border-slate-800 overflow-hidden">
-      {/* Top Canvas Toolbar — Deep Navy & Electric Blue */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0F172A] border-b border-slate-800">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 1L / 3L / Wiring Diagram Toggle */}
-          <div className="inline-flex rounded-xl bg-[#0B1120] p-1 border border-slate-800">
-            <button
-              type="button"
-              onClick={() => onDisplayModeChange('single-line')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                displayMode === 'single-line'
-                  ? 'bg-[#0066FF] text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <GitCommit className="w-3.5 h-3.5" />
-              Jednopólová (1L)
-            </button>
-            <button
-              type="button"
-              onClick={() => onDisplayModeChange('multi-line')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                displayMode === 'multi-line'
-                  ? 'bg-[#0066FF] text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              Viacpólová (3L)
-            </button>
-            <button
-              type="button"
-              onClick={() => onDisplayModeChange('wiring-diagram')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                displayMode === 'wiring-diagram'
-                  ? 'bg-[#0066FF] text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Cable className="w-3.5 h-3.5" />
-              Detailné zapojenie (Vodiče)
-            </button>
-          </div>
-
-          {onProjectChange && (
-            <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
+    <div className="schema-canvas-root flex flex-col h-full bg-[#0B1120] print:bg-white rounded-xl border border-slate-800 print:border-0 overflow-hidden print:overflow-visible">
+      {/* Top Canvas Toolbar — Hidden in print and in compactMode */}
+      {!compactMode && (
+        <div className="no-print print:hidden flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0F172A] border-b border-slate-800">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1L / 3L / Wiring Diagram Toggle */}
+            <div className="inline-flex rounded-xl bg-[#0B1120] p-1 border border-slate-800">
               <button
                 type="button"
-                onClick={handleAddQuickCircuit}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                title="Pridať nový vývodový okruh priamo do schémy"
+                onClick={() => onDisplayModeChange('single-line')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  displayMode === 'single-line'
+                    ? 'bg-[#0066FF] text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
-                + Okruh (FA)
+                <GitCommit className="w-3.5 h-3.5" />
+                Jednopólová (1L)
               </button>
               <button
                 type="button"
-                onClick={handleAddQuickRcd}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
-                title="Pridať prúdový chránič priamo do schémy"
+                onClick={() => onDisplayModeChange('multi-line')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  displayMode === 'multi-line'
+                    ? 'bg-[#0066FF] text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
-                + Chránič (FI)
+                <Layers className="w-3.5 h-3.5" />
+                Viacpólová (3L)
               </button>
               <button
                 type="button"
-                onClick={handleAutoAlignAndRoute}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0066FF]/20 hover:bg-[#0066FF]/30 text-[#38BDF8] border border-[#0066FF]/40 text-xs font-bold transition-colors cursor-pointer"
-                title="Automaticky zarovnať stĺpce, prepojiť zbernice a prečíslovať FA1..FAn"
+                onClick={() => onDisplayModeChange('wiring-diagram')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  displayMode === 'wiring-diagram'
+                    ? 'bg-[#0066FF] text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                Auto-zarovnať &amp; spojiť
+                <Cable className="w-3.5 h-3.5" />
+                Detailné zapojenie (Vodiče)
               </button>
             </div>
-          )}
-        </div>
 
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center bg-[#0B1120] rounded-lg border border-slate-800 p-0.5">
-            <button
-              type="button"
-              onClick={() => setZoom((z) => Math.max(0.45, +(z - 0.15).toFixed(2)))}
-              className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="Oddialiť"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <span className="px-2 text-xs font-mono text-slate-300 tabular-nums">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => setZoom((z) => Math.min(2.2, +(z + 0.15).toFixed(2)))}
-              className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="Priblížiť"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setZoom(1);
-                setPan({ x: 0, y: 0 });
-              }}
-              className="p-1.5 text-slate-400 hover:text-white border-l border-slate-800 transition-colors cursor-pointer"
-              title="Vycentrovať výkres"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
+            {onProjectChange && (
+              <div className="flex items-center gap-1.5 pl-1 border-l border-slate-800">
+                <button
+                  type="button"
+                  onClick={handleAddQuickCircuit}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="Pridať nový vývodový okruh priamo do schémy"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
+                  + Okruh (FA)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddQuickRcd}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  title="Pridať prúdový chránič priamo do schémy"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#38BDF8]" />
+                  + Chránič (FI)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAutoAlignAndRoute}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#0066FF]/20 hover:bg-[#0066FF]/30 text-[#38BDF8] border border-[#0066FF]/40 text-xs font-bold transition-colors cursor-pointer"
+                  title="Automaticky zarovnať stĺpce, prepojiť zbernice a prečíslovať FA1..FAn"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Auto-zarovnať &amp; spojiť
+                </button>
+              </div>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleExportSvg}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 text-[#38BDF8]" />
-            SVG
-          </button>
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center bg-[#0B1120] rounded-lg border border-slate-800 p-0.5">
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.max(0.45, +(z - 0.15).toFixed(2)))}
+                className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Oddialiť"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <span className="px-2 text-xs font-mono text-slate-300 tabular-nums">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.min(2.2, +(z + 0.15).toFixed(2)))}
+                className="p-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                title="Priblížiť"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }}
+                className="p-1.5 text-slate-400 hover:text-white border-l border-slate-800 transition-colors cursor-pointer"
+                title="Vycentrovať výkres"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
-          >
-            <Printer className="w-3.5 h-3.5" />
-            Tlač / PDF
-          </button>
+            <button
+              type="button"
+              onClick={handleExportSvg}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              title="Stiahnuť čisto schému ako vektorový súbor SVG"
+            >
+              <Download className="w-3.5 h-3.5 text-[#38BDF8]" />
+              SVG
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPng}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              title="Stiahnuť čisto schému + rozpis ističov ako obrázok PNG"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              PNG
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+              title="Stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export PDF (Schéma + Ističe)
+            </button>
+
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              title="Vytlačiť na tlačiarni"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-300" />
+              Tlač
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Auto-route feedback banner */}
       {autoRouteStatus && (
-        <div className="px-4 py-1.5 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300">
+        <div className="no-print px-4 py-1.5 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
           <span>{autoRouteStatus}</span>
         </div>
       )}
 
       {/* Interactive Inspector Bar when a component is clicked on the schematic */}
-      {onProjectChange && selectedElement && (
-        <div className="px-4 py-2.5 bg-[#0F172A] border-b border-[#0066FF]/50 flex flex-wrap items-center justify-between gap-3">
+      {!compactMode && onProjectChange && selectedElement && (
+        <div className="no-print px-4 py-2.5 bg-[#0F172A] border-b border-[#0066FF]/50 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-[#38BDF8]" />
             <span className="text-xs font-bold uppercase tracking-wider text-[#38BDF8]">
@@ -893,50 +959,75 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
       {/* Interactive SVG Viewport */}
       <div
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className={`relative flex-1 overflow-auto select-none ${
-          isDraggingCanvas ? 'cursor-grabbing' : 'cursor-grab'
+        onMouseDown={compactMode ? undefined : handleMouseDown}
+        onMouseMove={compactMode ? undefined : handleMouseMove}
+        onMouseUp={compactMode ? undefined : handleMouseUp}
+        onMouseLeave={compactMode ? undefined : handleMouseUp}
+        className={`schema-canvas-viewport relative flex-1 bg-slate-100 print:bg-white ${
+          compactMode
+            ? 'overflow-visible select-none bg-white'
+            : `overflow-auto select-none ${isDraggingCanvas ? 'cursor-grabbing' : 'cursor-grab'}`
         }`}
-        style={{
-          backgroundImage:
-            'radial-gradient(circle, rgba(148, 163, 184, 0.12) 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
-        }}
+        style={
+          compactMode
+            ? undefined
+            : {
+                backgroundImage:
+                  'radial-gradient(circle, rgba(15, 23, 42, 0.12) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+              }
+        }
       >
-        <div className="sticky top-2 left-3 z-10 inline-flex items-center gap-2 px-2.5 py-1 rounded bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 pointer-events-none">
-          <MoveHorizontal className="w-3.5 h-3.5 text-amber-400" />
-          <span>
-            Kliknutím na istič/chránič upravíte parametre • Ťahaním (Drag & Drop) dole zmeníte
-            poradie stĺpcov
-          </span>
-        </div>
+        {!compactMode && (
+          <div className="no-print print:hidden sticky top-2 left-3 z-10 inline-flex items-center gap-2 px-2.5 py-1 rounded bg-white/95 border border-slate-300 shadow-sm text-[11px] text-slate-700 pointer-events-none">
+            <MoveHorizontal className="w-3.5 h-3.5 text-[#0066FF]" />
+            <span>
+              Kliknutím na istič/chránič upravíte parametre • Ťahaním (Drag &amp; Drop) dole zmeníte
+              poradie stĺpcov
+            </span>
+          </div>
+        )}
 
         <div
-          className="min-w-max min-h-full flex items-center justify-center p-4"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: 'top left',
-          }}
+          className={`schema-canvas-transform ${
+            compactMode
+              ? 'w-full flex items-center justify-center p-0'
+              : 'min-w-max min-h-full flex items-center justify-center p-4'
+          }`}
+          style={
+            compactMode
+              ? undefined
+              : {
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  transformOrigin: 'top left',
+                }
+          }
         >
           <svg
             ref={svgRef}
-            width={canvasWidth}
-            height={canvasHeight}
+            width={compactMode ? '100%' : canvasWidth}
+            height={compactMode ? undefined : canvasHeight}
             viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-            className="bg-[#0b111e] rounded-lg shadow-2xl border border-slate-800"
+            className="schema-canvas-svg bg-white rounded-lg shadow-md border border-slate-300 w-full h-auto"
           >
-            {/* Outer Technical Drawing Frame (STN EN ISO 5457 style) */}
+            {/* Pure White Drawing Sheet Background */}
+            <rect
+              x={0}
+              y={0}
+              width={canvasWidth}
+              height={canvasHeight}
+              fill="#FFFFFF"
+            />
+
+            {/* Outer Technical Drawing Frame (STN EN ISO 5457 style - Black & White CAD) */}
             <rect
               x={12}
               y={12}
               width={canvasWidth - 24}
               height={canvasHeight - 24}
               fill="none"
-              stroke="#334155"
-              strokeWidth={1.5}
+              stroke="#0F172A"
+              strokeWidth={1.75}
             />
             <rect
               x={18}
@@ -944,8 +1035,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               width={canvasWidth - 36}
               height={canvasHeight - 36}
               fill="none"
-              stroke="#1e293b"
-              strokeWidth={1}
+              stroke="#475569"
+              strokeWidth={0.9}
             />
 
             {/* Top Header Banner inside Schema */}
@@ -953,7 +1044,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               <text
                 x={0}
                 y={16}
-                fill="#f8fafc"
+                fill="#0F172A"
                 fontSize={14}
                 fontWeight="bold"
                 fontFamily="Plus Jakarta Sans, sans-serif"
@@ -968,7 +1059,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               <text
                 x={0}
                 y={34}
-                fill="#94a3b8"
+                fill="#334155"
                 fontSize={11}
                 fontFamily="JetBrains Mono, monospace"
               >
@@ -998,12 +1089,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 HLAVNÝ VYPÍNAČ ALEBO ISTIČ V ROZVÁDZAČI QS1/QF1 */}
             <g transform="translate(118, 66)">
               {/* Step 1: PRÍVOD ELEKTRICKEJ ENERGIE */}
-              <line x1={0} y1={0} x2={0} y2={20} stroke="#f59e0b" strokeWidth={2.5} />
-              <line x1={-6} y1={7} x2={6} y2={13} stroke="#94a3b8" strokeWidth={1.5} />
+              <line x1={0} y1={0} x2={0} y2={20} stroke="#0F172A" strokeWidth={2.2} />
+              <line x1={-6} y1={7} x2={6} y2={13} stroke="#0F172A" strokeWidth={1.5} />
               <text
                 x={14}
                 y={10}
-                fill="#fbbf24"
+                fill="#0F172A"
                 fontSize={9.5}
                 fontFamily="JetBrains Mono, monospace"
                 fontWeight="bold"
@@ -1025,35 +1116,23 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   width={68}
                   height={44}
                   rx={4}
-                  fill={
-                    selectedElement?.type === 'main'
-                      ? 'rgba(245, 158, 11, 0.22)'
-                      : upstreamBreaker.enabled
-                      ? '#172033'
-                      : '#0f172a'
-                  }
-                  stroke={
-                    selectedElement?.type === 'main'
-                      ? '#fbbf24'
-                      : upstreamBreaker.enabled
-                      ? '#f59e0b'
-                      : '#475569'
-                  }
+                  fill={selectedElement?.type === 'main' ? '#EFF6FF' : '#FFFFFF'}
+                  stroke={selectedElement?.type === 'main' ? '#0066FF' : '#0F172A'}
                   strokeWidth={selectedElement?.type === 'main' ? 2.5 : 1.75}
                   strokeDasharray="4 2"
                 />
                 {upstreamBreaker.enabled ? (
                   <>
-                    <line x1={0} y1={20} x2={0} y2={30} stroke="#f8fafc" strokeWidth={1.75} />
-                    <line x1={0} y1={54} x2={0} y2={64} stroke="#f8fafc" strokeWidth={1.75} />
-                    <line x1={0} y1={54} x2={-10} y2={33} stroke="#f59e0b" strokeWidth={2} />
+                    <line x1={0} y1={20} x2={0} y2={30} stroke="#0F172A" strokeWidth={1.75} />
+                    <line x1={0} y1={54} x2={0} y2={64} stroke="#0F172A" strokeWidth={1.75} />
+                    <line x1={0} y1={54} x2={-10} y2={33} stroke="#0F172A" strokeWidth={2} />
                     {/* IEC Circuit Breaker Cross 'x' */}
-                    <line x1={-4} y1={28} x2={4} y2={34} stroke="#f59e0b" strokeWidth={1.5} />
-                    <line x1={-4} y1={34} x2={4} y2={28} stroke="#f59e0b" strokeWidth={1.5} />
+                    <line x1={-4} y1={28} x2={4} y2={34} stroke="#0F172A" strokeWidth={1.5} />
+                    <line x1={-4} y1={34} x2={4} y2={28} stroke="#0F172A" strokeWidth={1.5} />
                     <text
                       x={40}
                       y={33}
-                      fill="#f8fafc"
+                      fill="#0F172A"
                       fontSize={10.5}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
@@ -1063,7 +1142,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     <text
                       x={40}
                       y={46}
-                      fill="#fbbf24"
+                      fill="#334155"
                       fontSize={10}
                       fontFamily="JetBrains Mono, monospace"
                       fontWeight="bold"
@@ -1074,11 +1153,11 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   </>
                 ) : (
                   <>
-                    <line x1={0} y1={20} x2={0} y2={64} stroke="#64748b" strokeWidth={1.75} strokeDasharray="3 3" />
+                    <line x1={0} y1={20} x2={0} y2={64} stroke="#64748B" strokeWidth={1.75} strokeDasharray="3 3" />
                     <text
                       x={40}
                       y={44}
-                      fill="#64748b"
+                      fill="#64748B"
                       fontSize={9.5}
                       fontFamily="JetBrains Mono, monospace"
                     >
@@ -1089,7 +1168,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               </g>
 
               {/* Step 3: ELEKTROMER (kWh) */}
-              <line x1={0} y1={64} x2={0} y2={78} stroke="#f59e0b" strokeWidth={2} />
+              <line x1={0} y1={64} x2={0} y2={78} stroke="#0F172A" strokeWidth={2} />
               {electricityMeter.enabled ? (
                 <g>
                   <rect
@@ -1098,17 +1177,17 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={52}
                     height={34}
                     rx={4}
-                    fill="#0f172a"
-                    stroke="#10b981"
+                    fill="#FFFFFF"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                     strokeDasharray="3 2"
                   />
-                  <circle cx={0} cy={95} r={11} fill="#064e3b" stroke="#10b981" strokeWidth={1.3} />
+                  <circle cx={0} cy={95} r={11} fill="#F8FAFC" stroke="#0F172A" strokeWidth={1.3} />
                   <text
                     x={0}
                     y={98.5}
                     textAnchor="middle"
-                    fill="#6ee7b7"
+                    fill="#0F172A"
                     fontSize={8.5}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -1118,7 +1197,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   <text
                     x={34}
                     y={92}
-                    fill="#6ee7b7"
+                    fill="#0F172A"
                     fontSize={10}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -1128,7 +1207,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   <text
                     x={34}
                     y={104}
-                    fill="#94a3b8"
+                    fill="#475569"
                     fontSize={9}
                     fontFamily="JetBrains Mono, monospace"
                   >
@@ -1136,16 +1215,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   </text>
                 </g>
               ) : (
-                <line x1={0} y1={78} x2={0} y2={112} stroke="#f59e0b" strokeWidth={2} />
+                <line x1={0} y1={78} x2={0} y2={112} stroke="#0F172A" strokeWidth={2} />
               )}
 
               {/* Step 4: PRÍVOD DO BYTOVÉHO ROZVÁDZAČA */}
-              <line x1={0} y1={112} x2={0} y2={134} stroke="#f59e0b" strokeWidth={2.2} />
-              <line x1={-6} y1={120} x2={6} y2={125} stroke="#94a3b8" strokeWidth={1.4} />
+              <line x1={0} y1={112} x2={0} y2={134} stroke="#0F172A" strokeWidth={2.2} />
+              <line x1={-6} y1={120} x2={6} y2={125} stroke="#0F172A" strokeWidth={1.4} />
               <text
                 x={14}
                 y={126}
-                fill="#cbd5e1"
+                fill="#0F172A"
                 fontSize={9.5}
                 fontWeight="bold"
                 fontFamily="JetBrains Mono, monospace"
@@ -1167,50 +1246,40 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   width={68}
                   height={48}
                   rx={4}
-                  fill={
-                    selectedElement?.type === 'internal-main'
-                      ? 'rgba(56, 189, 248, 0.22)'
-                      : '#0f172a'
-                  }
-                  stroke={
-                    selectedElement?.type === 'internal-main'
-                      ? '#38bdf8'
-                      : isInternalBreaker
-                      ? '#f59e0b'
-                      : '#38bdf8'
-                  }
+                  fill={selectedElement?.type === 'internal-main' ? '#EFF6FF' : '#FFFFFF'}
+                  stroke={selectedElement?.type === 'internal-main' ? '#0066FF' : '#0F172A'}
                   strokeWidth={selectedElement?.type === 'internal-main' ? 2.5 : 1.75}
                 />
 
                 {internalDevice.enabled ? (
                   <>
-                    <line x1={0} y1={134} x2={0} y2={145} stroke="#e2e8f0" strokeWidth={1.75} />
-                    <line x1={0} y1={170} x2={0} y2={182} stroke="#e2e8f0" strokeWidth={1.75} />
+                    <line x1={0} y1={134} x2={0} y2={145} stroke="#0F172A" strokeWidth={1.75} />
+                    <line x1={0} y1={170} x2={0} y2={182} stroke="#0F172A" strokeWidth={1.75} />
                     <line
                       x1={0}
                       y1={170}
                       x2={-10}
                       y2={148}
-                      stroke={isInternalBreaker ? '#f59e0b' : '#38bdf8'}
+                      stroke="#0F172A"
                       strokeWidth={2}
                     />
                     {isInternalBreaker ? (
                       <>
                         {/* IEC Circuit Breaker Cross 'x' ONLY when device is Istič or hasOvercurrentProtection */}
-                        <line x1={-4} y1={143} x2={4} y2={149} stroke="#f59e0b" strokeWidth={1.5} />
-                        <line x1={-4} y1={149} x2={4} y2={143} stroke="#f59e0b" strokeWidth={1.5} />
+                        <line x1={-4} y1={143} x2={4} y2={149} stroke="#0F172A" strokeWidth={1.5} />
+                        <line x1={-4} y1={149} x2={4} y2={143} stroke="#0F172A" strokeWidth={1.5} />
                       </>
                     ) : (
                       <>
                         {/* IEC Switch-Disconnector Isolating Bar (NO breaker cross!) */}
-                        <line x1={-5} y1={145} x2={5} y2={145} stroke="#38bdf8" strokeWidth={2} />
-                        <circle cx={0} cy={170} r={2.2} fill="#38bdf8" />
+                        <line x1={-5} y1={145} x2={5} y2={145} stroke="#0F172A" strokeWidth={2} />
+                        <circle cx={0} cy={170} r={2.2} fill="#0F172A" />
                       </>
                     )}
                     <text
                       x={40}
                       y={149}
-                      fill="#f8fafc"
+                      fill="#0F172A"
                       fontSize={10.5}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
@@ -1220,7 +1289,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     <text
                       x={40}
                       y={162}
-                      fill={isInternalBreaker ? '#fbbf24' : '#38bdf8'}
+                      fill="#334155"
                       fontSize={10}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
@@ -1236,7 +1305,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     <text
                       x={40}
                       y={174}
-                      fill="#94a3b8"
+                      fill="#475569"
                       fontSize={9}
                       fontFamily="Plus Jakarta Sans, sans-serif"
                     >
@@ -1248,11 +1317,11 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   </>
                 ) : (
                   <>
-                    <line x1={0} y1={134} x2={0} y2={182} stroke="#f59e0b" strokeWidth={2} />
+                    <line x1={0} y1={134} x2={0} y2={182} stroke="#0F172A" strokeWidth={2} />
                     <text
                       x={40}
                       y={160}
-                      fill="#64748b"
+                      fill="#64748B"
                       fontSize={9.5}
                       fontFamily="JetBrains Mono, monospace"
                     >
@@ -1267,13 +1336,13 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 y1={182}
                 x2={0}
                 y2={busY_L1 - 66}
-                stroke="#f59e0b"
+                stroke="#0F172A"
                 strokeWidth={2.5}
               />
-              <circle cx={0} cy={busY_L1 - 66} r={4} fill="#f59e0b" />
+              <circle cx={0} cy={busY_L1 - 66} r={4} fill="#0F172A" />
             </g>
 
-            {/* PEN Split Point visualization for TN-C-S */}
+            {/* PEN Split Point visualization for TN-C-S (Green PE + Blue N) */}
             {(project.networkSystem === 'TN-C-S' || displayMode === 'wiring-diagram') && (
               <g transform="translate(20, 212)">
                 <rect
@@ -1282,15 +1351,15 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   width={72}
                   height={42}
                   rx={4}
-                  fill="#0f172a"
-                  stroke="#10b981"
-                  strokeWidth={1.25}
+                  fill="#F0FDF4"
+                  stroke="#16A34A"
+                  strokeWidth={1.5}
                 />
                 <text
                   x={36}
                   y={15}
                   textAnchor="middle"
-                  fill="#10b981"
+                  fill="#15803D"
                   fontSize={9}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
@@ -1301,8 +1370,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   x={36}
                   y={27}
                   textAnchor="middle"
-                  fill="#e2e8f0"
+                  fill="#0F172A"
                   fontSize={8.5}
+                  fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
                 >
                   {project.networkSystem === 'TN-C-S'
@@ -1313,8 +1383,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   x={36}
                   y={37}
                   textAnchor="middle"
-                  fill="#38bdf8"
+                  fill="#0284C7"
                   fontSize={8}
+                  fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
                 >
                   HOP (MET) ≤ 10 Ω
@@ -1337,26 +1408,26 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   y1={busY_L1 - 160}
                   x2={0}
                   y2={48}
-                  stroke="#f59e0b"
+                  stroke="#0F172A"
                   strokeWidth={1.75}
                 />
-                <circle cx={0} cy={busY_L1 - 160} r={3.5} fill="#f59e0b" />
+                <circle cx={0} cy={busY_L1 - 160} r={3.5} fill="#0F172A" />
                 <rect
                   x={-26}
                   y={10}
                   width={52}
                   height={38}
                   rx={3}
-                  fill="#172033"
-                  stroke="#a855f7"
+                  fill="#FFFFFF"
+                  stroke="#0F172A"
                   strokeWidth={1.5}
                 />
-                <polygon points="-5,22 5,22 0,34" fill="#a855f7" />
-                <line x1={-7} y1={34} x2={7} y2={34} stroke="#a855f7" strokeWidth={1.5} />
+                <polygon points="-5,22 5,22 0,34" fill="#0F172A" />
+                <line x1={-7} y1={34} x2={7} y2={34} stroke="#0F172A" strokeWidth={1.5} />
                 <text
                   x={32}
                   y={24}
-                  fill="#e9d5ff"
+                  fill="#0F172A"
                   fontSize={10}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
@@ -1366,20 +1437,21 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 <text
                   x={32}
                   y={36}
-                  fill="#94a3b8"
+                  fill="#475569"
                   fontSize={9.5}
                   fontFamily="JetBrains Mono, monospace"
                 >
                   {mainBreaker.manufacturer} SPD
                 </text>
-                <line x1={0} y1={10} x2={0} y2={-4} stroke="#10b981" strokeWidth={1.5} />
-                <line x1={-8} y1={-4} x2={8} y2={-4} stroke="#10b981" strokeWidth={1.5} />
-                <line x1={-5} y1={-8} x2={5} y2={-8} stroke="#10b981" strokeWidth={1.5} />
-                <line x1={-2} y1={-12} x2={2} y2={-12} stroke="#10b981" strokeWidth={1.5} />
+                {/* Green PE Earthing Symbol */}
+                <line x1={0} y1={10} x2={0} y2={-4} stroke="#16A34A" strokeWidth={1.6} />
+                <line x1={-8} y1={-4} x2={8} y2={-4} stroke="#16A34A" strokeWidth={1.6} />
+                <line x1={-5} y1={-8} x2={5} y2={-8} stroke="#16A34A" strokeWidth={1.6} />
+                <line x1={-2} y1={-12} x2={2} y2={-12} stroke="#16A34A" strokeWidth={1.6} />
               </g>
             )}
 
-            {/* 3. MAIN HORIZONTAL BUSBARS (L1, L2, L3, N, PE) */}
+            {/* 3. MAIN HORIZONTAL BUSBARS (L1, L2, L3 = Black, N = Blue, PE = Green) */}
             {displayMode === 'single-line' ? (
               <g>
                 <line
@@ -1387,13 +1459,13 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   y1={busY_L1}
                   x2={canvasWidth - 65}
                   y2={busY_L1}
-                  stroke="#f59e0b"
-                  strokeWidth={3.5}
+                  stroke="#0F172A"
+                  strokeWidth={3}
                 />
                 <text
                   x={28}
                   y={busY_L1 - 8}
-                  fill="#fbbf24"
+                  fill="#0F172A"
                   fontSize={10.5}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
@@ -1408,18 +1480,18 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   y1={busY_L1}
                   x2={canvasWidth - 65}
                   y2={busY_L1}
-                  stroke="#d97706"
-                  strokeWidth={2.2}
+                  stroke="#0F172A"
+                  strokeWidth={2}
                 />
                 <text
                   x={28}
                   y={busY_L1 + 4}
-                  fill="#f59e0b"
+                  fill="#0F172A"
                   fontSize={10}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
                 >
-                  L1 (hnedý)
+                  L1
                 </text>
 
                 {isThreePhase && (
@@ -1429,18 +1501,18 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       y1={busY_L2}
                       x2={canvasWidth - 65}
                       y2={busY_L2}
-                      stroke="#94a3b8"
-                      strokeWidth={2.2}
+                      stroke="#0F172A"
+                      strokeWidth={2}
                     />
                     <text
                       x={28}
                       y={busY_L2 + 4}
-                      fill="#cbd5e1"
+                      fill="#0F172A"
                       fontSize={10}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
                     >
-                      L2 (čierny)
+                      L2
                     </text>
 
                     <line
@@ -1448,18 +1520,18 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       y1={busY_L3}
                       x2={canvasWidth - 65}
                       y2={busY_L3}
-                      stroke="#64748b"
-                      strokeWidth={2.2}
+                      stroke="#0F172A"
+                      strokeWidth={2}
                     />
                     <text
                       x={28}
                       y={busY_L3 + 4}
-                      fill="#94a3b8"
+                      fill="#0F172A"
                       fontSize={10}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
                     >
-                      L3 (sivý)
+                      L3
                     </text>
                   </>
                 )}
@@ -1471,13 +1543,13 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       y1={busY_N}
                       x2={canvasWidth - 65}
                       y2={busY_N}
-                      stroke="#0ea5e9"
-                      strokeWidth={2}
+                      stroke="#0284C7"
+                      strokeWidth={2.2}
                     />
                     <text
                       x={28}
                       y={busY_N + 4}
-                      fill="#38bdf8"
+                      fill="#0284C7"
                       fontSize={10}
                       fontWeight="bold"
                       fontFamily="JetBrains Mono, monospace"
@@ -1492,19 +1564,19 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   y1={busY_PE}
                   x2={canvasWidth - 65}
                   y2={busY_PE}
-                  stroke="#10b981"
-                  strokeWidth={2}
+                  stroke="#16A34A"
+                  strokeWidth={2.2}
                   strokeDasharray="6 3"
                 />
                 <text
                   x={28}
                   y={busY_PE + 4}
-                  fill="#10b981"
+                  fill="#15803D"
                   fontSize={10}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
                 >
-                  {project.networkSystem === 'TN-C' ? 'PEN' : 'PE (ZŽ)'}
+                  {project.networkSystem === 'TN-C' ? 'PEN (ZŽ)' : 'PE (ZŽ)'}
                 </text>
               </g>
             )}
@@ -1537,10 +1609,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={busY_L1}
                         x2={rcdCenterX - 8}
                         y2={rcdBoxY}
-                        stroke="#d97706"
+                        stroke="#0F172A"
                         strokeWidth={1.6}
                       />
-                      <circle cx={rcdCenterX - 8} cy={busY_L1} r={3} fill="#d97706" />
+                      <circle cx={rcdCenterX - 8} cy={busY_L1} r={3} fill="#0F172A" />
                       {rcd.poles === '4P' && isThreePhase && (
                         <>
                           <line
@@ -1548,19 +1620,19 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             y1={busY_L2}
                             x2={rcdCenterX - 3}
                             y2={rcdBoxY}
-                            stroke="#94a3b8"
+                            stroke="#0F172A"
                             strokeWidth={1.6}
                           />
-                          <circle cx={rcdCenterX - 3} cy={busY_L2} r={3} fill="#94a3b8" />
+                          <circle cx={rcdCenterX - 3} cy={busY_L2} r={3} fill="#0F172A" />
                           <line
                             x1={rcdCenterX + 3}
                             y1={busY_L3}
                             x2={rcdCenterX + 3}
                             y2={rcdBoxY}
-                            stroke="#64748b"
+                            stroke="#0F172A"
                             strokeWidth={1.6}
                           />
-                          <circle cx={rcdCenterX + 3} cy={busY_L3} r={3} fill="#64748b" />
+                          <circle cx={rcdCenterX + 3} cy={busY_L3} r={3} fill="#0F172A" />
                         </>
                       )}
                       {project.networkSystem !== 'TN-C' && (
@@ -1570,10 +1642,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             y1={busY_N}
                             x2={rcdCenterX + 8}
                             y2={rcdBoxY}
-                            stroke="#0ea5e9"
+                            stroke="#0284C7"
                             strokeWidth={1.6}
                           />
-                          <circle cx={rcdCenterX + 8} cy={busY_N} r={3} fill="#0ea5e9" />
+                          <circle cx={rcdCenterX + 8} cy={busY_N} r={3} fill="#0284C7" />
                         </>
                       )}
                     </>
@@ -1584,10 +1656,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={busY_L1}
                         x2={rcdCenterX}
                         y2={rcdBoxY}
-                        stroke="#38bdf8"
+                        stroke="#0F172A"
                         strokeWidth={2}
                       />
-                      <circle cx={rcdCenterX} cy={busY_L1} r={3.5} fill="#38bdf8" />
+                      <circle cx={rcdCenterX} cy={busY_L1} r={3.5} fill="#0F172A" />
                     </>
                   )}
 
@@ -1597,14 +1669,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={64}
                     height={58}
                     rx={4}
-                    fill={isSelected ? 'rgba(6, 182, 212, 0.22)' : '#0f172a'}
-                    stroke={
-                      isSelected
-                        ? '#22d3ee'
-                        : rcd.deviceKind === 'RCBO'
-                        ? '#f59e0b'
-                        : '#06b6d4'
-                    }
+                    fill={isSelected ? '#EFF6FF' : '#FFFFFF'}
+                    stroke={isSelected ? '#0066FF' : '#0F172A'}
                     strokeWidth={isSelected ? 2.5 : 1.75}
                   />
 
@@ -1614,7 +1680,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     rx={14}
                     ry={6}
                     fill="none"
-                    stroke="#06b6d4"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                   />
                   <line
@@ -1622,7 +1688,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={rcdBoxY}
                     x2={rcdCenterX}
                     y2={rcdBoxY + 14}
-                    stroke="#e2e8f0"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                   />
                   <line
@@ -1630,7 +1696,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={rcdBoxY + 42}
                     x2={rcdCenterX}
                     y2={rcdBoxY + 58}
-                    stroke="#e2e8f0"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                   />
                   <line
@@ -1638,7 +1704,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={rcdBoxY + 42}
                     x2={rcdCenterX - 9}
                     y2={rcdBoxY + 16}
-                    stroke={rcd.deviceKind === 'RCBO' ? '#f59e0b' : '#06b6d4'}
+                    stroke="#0F172A"
                     strokeWidth={1.75}
                   />
                   {rcd.deviceKind === 'RCBO' && (
@@ -1648,7 +1714,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={rcdBoxY + 11.5}
                         x2={rcdCenterX + 3.5}
                         y2={rcdBoxY + 18.5}
-                        stroke="#f59e0b"
+                        stroke="#0F172A"
                         strokeWidth={1.5}
                       />
                       <line
@@ -1656,7 +1722,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={rcdBoxY + 11.5}
                         x2={rcdCenterX - 3.5}
                         y2={rcdBoxY + 18.5}
-                        stroke="#f59e0b"
+                        stroke="#0F172A"
                         strokeWidth={1.5}
                       />
                     </>
@@ -1668,16 +1734,17 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={13}
                     height={11}
                     rx={2}
-                    fill="#1e293b"
-                    stroke="#64748b"
+                    fill="#F8FAFC"
+                    stroke="#0F172A"
                     strokeWidth={1}
                   />
                   <text
                     x={rcdCenterX + 18.5}
                     y={rcdBoxY + 16.5}
                     textAnchor="middle"
-                    fill="#cbd5e1"
+                    fill="#0F172A"
                     fontSize={8}
+                    fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
                   >
                     T
@@ -1687,7 +1754,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={rcdCenterX - 36}
                     y={rcdBoxY + 14}
                     textAnchor="end"
-                    fill={rcd.deviceKind === 'RCBO' ? '#fbbf24' : '#22d3ee'}
+                    fill="#0F172A"
                     fontSize={11}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -1698,8 +1765,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={rcdCenterX - 36}
                     y={rcdBoxY + 27}
                     textAnchor="end"
-                    fill="#f8fafc"
+                    fill="#0F172A"
                     fontSize={9.5}
+                    fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
                   >
                     {rcd.deviceKind} {rcd.poles}
@@ -1708,7 +1776,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={rcdCenterX - 36}
                     y={rcdBoxY + 39}
                     textAnchor="end"
-                    fill="#94a3b8"
+                    fill="#334155"
                     fontSize={9}
                     fontFamily="JetBrains Mono, monospace"
                   >
@@ -1719,7 +1787,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={rcdCenterX - 36}
                     y={rcdBoxY + 51}
                     textAnchor="end"
-                    fill="#fbbf24"
+                    fill="#0F172A"
                     fontSize={9}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -1729,12 +1797,13 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
                   {group.circuits.length > 0 && (
                     <>
+                      {/* Phase sub-busbar from RCD (Black) */}
                       <line
                         x1={rcdCenterX}
                         y1={rcdBoxY + 58}
                         x2={rcdCenterX}
                         y2={rcdBusY}
-                        stroke="#06b6d4"
+                        stroke="#0F172A"
                         strokeWidth={2}
                       />
 
@@ -1743,15 +1812,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={rcdBusY}
                         x2={lastX}
                         y2={rcdBusY}
-                        stroke="#06b6d4"
-                        strokeWidth={3}
+                        stroke="#0F172A"
+                        strokeWidth={2.5}
                       />
+                      {/* Neutral sub-busbar N(FIx) (Blue) */}
                       <line
                         x1={firstX}
                         y1={rcdBusY + 12}
-                        x2={lastX}
+                        x2={lastX + 30}
                         y2={rcdBusY + 12}
-                        stroke="#0284c7"
+                        stroke="#0284C7"
                         strokeWidth={2}
                         strokeDasharray={displayMode === 'wiring-diagram' ? undefined : '4 2'}
                       />
@@ -1761,12 +1831,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         width={Math.max(115, lastX - firstX + 56)}
                         height={16}
                         rx={3}
-                        fill="#083344"
+                        fill="#EFF6FF"
+                        stroke="#0284C7"
+                        strokeWidth={1}
                       />
                       <text
-                        x={firstX + 4}
+                        x={firstX + 6}
                         y={rcdBusY - 11}
-                        fill="#67e8f9"
+                        fill="#0284C7"
                         fontSize={9}
                         fontFamily="JetBrains Mono, monospace"
                         fontWeight="bold"
@@ -1805,7 +1877,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={rcdBoxY + 58}
                         x2={x}
                         y2={loadBoxY}
-                        stroke="#f59e0b"
+                        stroke="#0F172A"
                         strokeWidth={1.75}
                       />
                       {displayMode === 'wiring-diagram' && (
@@ -1815,45 +1887,46 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             y1={rcdBoxY + 58}
                             x2={x + 4}
                             y2={loadBoxY}
-                            stroke="#0ea5e9"
-                            strokeWidth={1.4}
+                            stroke="#0284C7"
+                            strokeWidth={1.5}
                           />
                           <line
                             x1={x + 9}
                             y1={busY_PE}
                             x2={x + 9}
                             y2={loadBoxY}
-                            stroke="#10b981"
-                            strokeWidth={1.3}
+                            stroke="#16A34A"
+                            strokeWidth={1.4}
                             strokeDasharray="4 2"
                           />
-                          <circle cx={x + 9} cy={busY_PE} r={2.5} fill="#10b981" />
+                          <circle cx={x + 9} cy={busY_PE} r={2.5} fill="#16A34A" />
                         </>
                       )}
                       <line
-                        x1={x - 6}
-                        y1={cableStartY}
-                        x2={x + 6}
-                        y2={cableStartY - 8}
-                        stroke="#fbbf24"
+                        x1={x - 5}
+                        y1={mcbBoxY + 70}
+                        x2={x + 5}
+                        y2={mcbBoxY + 62}
+                        stroke="#0F172A"
                         strokeWidth={1.5}
                       />
                       <text
-                        x={x + 9}
-                        y={cableStartY - 2}
-                        fill="#fbbf24"
+                        x={x + 8}
+                        y={mcbBoxY + 69}
+                        fill="#0F172A"
                         fontSize={8.5}
+                        fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
                       >
                         {rcbo.poles === '4P' ? '5' : '3'}
                       </text>
                       <text
-                        x={x - 10}
-                        y={cableStartY + 34}
-                        fill="#cbd5e1"
-                        fontSize={8.5}
+                        x={x - 8}
+                        y={loadBoxY - 6}
+                        fill="#334155"
+                        fontSize={8}
                         fontFamily="JetBrains Mono, monospace"
-                        transform={`rotate(-90, ${x - 10}, ${cableStartY + 34})`}
+                        transform={`rotate(-90, ${x - 8}, ${loadBoxY - 6})`}
                       >
                         {rcboCable} (15m)
                       </text>
@@ -1863,15 +1936,15 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         width={84}
                         height={56}
                         rx={4}
-                        fill="#111827"
-                        stroke="#f59e0b"
-                        strokeWidth={1.25}
+                        fill="#FFFFFF"
+                        stroke="#0F172A"
+                        strokeWidth={1.5}
                       />
                       <text
                         x={x}
                         y={loadBoxY + 16}
                         textAnchor="middle"
-                        fill="#f8fafc"
+                        fill="#0F172A"
                         fontSize={9.5}
                         fontWeight="bold"
                         fontFamily="Plus Jakarta Sans, sans-serif"
@@ -1882,7 +1955,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         x={x}
                         y={loadBoxY + 30}
                         textAnchor="middle"
-                        fill="#fbbf24"
+                        fill="#334155"
                         fontSize={8.5}
                         fontFamily="JetBrains Mono, monospace"
                       >
@@ -1892,7 +1965,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         x={x}
                         y={loadBoxY + 45}
                         textAnchor="middle"
-                        fill="#10b981"
+                        fill="#0F172A"
                         fontSize={9}
                         fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
@@ -1909,7 +1982,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       x={x}
                       y={mcbBoxY + 25}
                       textAnchor="middle"
-                      fill="#64748b"
+                      fill="#64748B"
                       fontSize={9.5}
                       fontFamily="JetBrains Mono, monospace"
                     >
@@ -1923,15 +1996,6 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               const topSourceY = hasParentRcd ? rcdBusY : busY_L1;
               const isCircuitSelected =
                 selectedElement?.type === 'circuit' && selectedElement.id === c.id;
-
-              const phaseColor =
-                c.phase === 'L1'
-                  ? '#f59e0b'
-                  : c.phase === 'L2'
-                  ? '#cbd5e1'
-                  : c.phase === 'L3'
-                  ? '#94a3b8'
-                  : '#fbbf24';
 
               return (
                 <g
@@ -1948,14 +2012,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={topSourceY}
                     x2={x}
                     y2={mcbBoxY}
-                    stroke={hasParentRcd ? '#06b6d4' : phaseColor}
+                    stroke="#0F172A"
                     strokeWidth={1.75}
                   />
                   <circle
                     cx={x}
                     cy={topSourceY}
                     r={3}
-                    fill={hasParentRcd ? '#06b6d4' : phaseColor}
+                    fill="#0F172A"
                   />
 
                   {(displayMode === 'multi-line' || displayMode === 'wiring-diagram') &&
@@ -1966,16 +2030,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           y1={topSourceY}
                           x2={x - 6}
                           y2={mcbBoxY}
-                          stroke="#d97706"
-                          strokeWidth={1.2}
+                          stroke="#0F172A"
+                          strokeWidth={1.3}
                         />
                         <line
                           x1={x + 6}
                           y1={topSourceY}
                           x2={x + 6}
                           y2={mcbBoxY}
-                          stroke="#94a3b8"
-                          strokeWidth={1.2}
+                          stroke="#0F172A"
+                          strokeWidth={1.3}
                         />
                       </>
                     )}
@@ -1986,8 +2050,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={48}
                     height={52}
                     rx={4}
-                    fill={isCircuitSelected ? 'rgba(245, 158, 11, 0.22)' : '#0f172a'}
-                    stroke={isCircuitSelected ? '#fbbf24' : '#475569'}
+                    fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
+                    stroke={isCircuitSelected ? '#0066FF' : '#0F172A'}
                     strokeWidth={isCircuitSelected ? 2.5 : 1.5}
                   />
 
@@ -1996,7 +2060,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={mcbBoxY}
                     x2={x}
                     y2={mcbBoxY + 13}
-                    stroke="#e2e8f0"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                   />
                   <line
@@ -2004,7 +2068,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={mcbBoxY + 39}
                     x2={x}
                     y2={mcbBoxY + 52}
-                    stroke="#e2e8f0"
+                    stroke="#0F172A"
                     strokeWidth={1.5}
                   />
                   <line
@@ -2012,7 +2076,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     y1={mcbBoxY + 39}
                     x2={x - 9}
                     y2={mcbBoxY + 16}
-                    stroke="#f59e0b"
+                    stroke="#0F172A"
                     strokeWidth={1.75}
                   />
                   <path
@@ -2020,7 +2084,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       mcbBoxY + 30
                     }`}
                     fill="none"
-                    stroke="#94a3b8"
+                    stroke="#0F172A"
                     strokeWidth={1.2}
                   />
 
@@ -2028,7 +2092,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={x}
                     y={mcbBoxY - 20}
                     textAnchor="middle"
-                    fill="#f8fafc"
+                    fill="#0F172A"
                     fontSize={10.5}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -2039,7 +2103,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={x}
                     y={mcbBoxY - 7}
                     textAnchor="middle"
-                    fill="#fbbf24"
+                    fill="#0F172A"
                     fontSize={9.5}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -2054,15 +2118,15 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={c.phase === 'L1,L2,L3' ? 28 : 20}
                     height={13}
                     rx={2}
-                    fill="#1e293b"
-                    stroke="#334155"
-                    strokeWidth={0.8}
+                    fill="#F8FAFC"
+                    stroke="#0F172A"
+                    strokeWidth={1}
                   />
                   <text
                     x={x + (c.phase === 'L1,L2,L3' ? 28 : 24)}
                     y={mcbBoxY + 13}
                     textAnchor="middle"
-                    fill="#38bdf8"
+                    fill="#0F172A"
                     fontSize={8}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -2072,38 +2136,37 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
                   {displayMode === 'wiring-diagram' ? (
                     <g>
+                      {/* Phase conductor L from bottom of MCB (Black) */}
                       <line
-                        x1={x - 6}
+                        x1={x}
                         y1={mcbBoxY + 52}
-                        x2={x - 6}
+                        x2={x}
                         y2={loadBoxY}
-                        stroke={phaseColor}
+                        stroke="#0F172A"
                         strokeWidth={1.6}
                       />
-                      <line
-                        x1={x + 2}
-                        y1={hasParentRcd ? rcdBusY + 12 : busY_N}
-                        x2={x + 2}
-                        y2={loadBoxY}
-                        stroke="#0ea5e9"
-                        strokeWidth={1.4}
+                      {/* Neutral conductor N (Blue) routed cleanly on the right of MCB */}
+                      <polyline
+                        points={`${x + 28},${hasParentRcd ? rcdBusY + 12 : busY_N} ${x + 28},${mcbBoxY + 58} ${x + 5},${mcbBoxY + 58} ${x + 5},${loadBoxY}`}
+                        fill="none"
+                        stroke="#0284C7"
+                        strokeWidth={1.5}
                       />
                       <circle
-                        cx={x + 2}
+                        cx={x + 28}
                         cy={hasParentRcd ? rcdBusY + 12 : busY_N}
                         r={2.5}
-                        fill="#0ea5e9"
+                        fill="#0284C7"
                       />
-                      <line
-                        x1={x + 9}
-                        y1={busY_PE}
-                        x2={x + 9}
-                        y2={loadBoxY}
-                        stroke="#10b981"
-                        strokeWidth={1.3}
+                      {/* Protective conductor PE (Green) routed cleanly on the right */}
+                      <polyline
+                        points={`${x + 34},${busY_PE} ${x + 34},${mcbBoxY + 64} ${x + 10},${mcbBoxY + 64} ${x + 10},${loadBoxY}`}
+                        fill="none"
+                        stroke="#16A34A"
+                        strokeWidth={1.4}
                         strokeDasharray="4 2"
                       />
-                      <circle cx={x + 9} cy={busY_PE} r={2.5} fill="#10b981" />
+                      <circle cx={x + 34} cy={busY_PE} r={2.5} fill="#16A34A" />
                     </g>
                   ) : (
                     <g>
@@ -2112,22 +2175,23 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         y1={mcbBoxY + 52}
                         x2={x}
                         y2={loadBoxY}
-                        stroke="#94a3b8"
+                        stroke="#0F172A"
                         strokeWidth={1.5}
                       />
                       <line
-                        x1={x - 6}
-                        y1={cableStartY}
-                        x2={x + 6}
-                        y2={cableStartY - 8}
-                        stroke="#fbbf24"
+                        x1={x - 5}
+                        y1={mcbBoxY + 70}
+                        x2={x + 5}
+                        y2={mcbBoxY + 62}
+                        stroke="#0F172A"
                         strokeWidth={1.5}
                       />
                       <text
-                        x={x + 9}
-                        y={cableStartY - 2}
-                        fill="#fbbf24"
+                        x={x + 8}
+                        y={mcbBoxY + 69}
+                        fill="#0F172A"
                         fontSize={8.5}
+                        fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
                       >
                         {c.poles === '3P' || c.poles === '4P' ? '5' : '3'}
@@ -2136,12 +2200,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   )}
 
                   <text
-                    x={x - 10}
-                    y={cableStartY + 34}
-                    fill="#cbd5e1"
-                    fontSize={8.5}
+                    x={x - 8}
+                    y={loadBoxY - 6}
+                    fill="#334155"
+                    fontSize={8}
                     fontFamily="JetBrains Mono, monospace"
-                    transform={`rotate(-90, ${x - 10}, ${cableStartY + 34})`}
+                    transform={`rotate(-90, ${x - 8}, ${loadBoxY - 6})`}
                   >
                     {c.cable} ({c.cableLengthM || 15}m)
                   </text>
@@ -2152,15 +2216,15 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     width={84}
                     height={56}
                     rx={4}
-                    fill="#111827"
-                    stroke={isCircuitSelected ? '#fbbf24' : '#334155'}
-                    strokeWidth={1.25}
+                    fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
+                    stroke={isCircuitSelected ? '#0066FF' : '#0F172A'}
+                    strokeWidth={1.5}
                   />
                   <text
                     x={x}
                     y={loadBoxY + 16}
                     textAnchor="middle"
-                    fill="#f8fafc"
+                    fill="#0F172A"
                     fontSize={9.5}
                     fontWeight="bold"
                     fontFamily="Plus Jakarta Sans, sans-serif"
@@ -2171,7 +2235,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={x}
                     y={loadBoxY + 30}
                     textAnchor="middle"
-                    fill="#94a3b8"
+                    fill="#475569"
                     fontSize={8.5}
                     fontFamily="Plus Jakarta Sans, sans-serif"
                   >
@@ -2181,7 +2245,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     x={x}
                     y={loadBoxY + 45}
                     textAnchor="middle"
-                    fill="#10b981"
+                    fill="#0F172A"
                     fontSize={9}
                     fontWeight="bold"
                     fontFamily="JetBrains Mono, monospace"
@@ -2201,14 +2265,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   width={560}
                   height={56}
                   rx={4}
-                  fill="#082f49"
-                  stroke="#0ea5e9"
-                  strokeWidth={1.2}
+                  fill="#F8FAFC"
+                  stroke="#0284C7"
+                  strokeWidth={1.4}
                 />
                 <text
                   x={12}
                   y={18}
-                  fill="#38bdf8"
+                  fill="#0284C7"
                   fontSize={10}
                   fontWeight="bold"
                   fontFamily="JetBrains Mono, monospace"
@@ -2218,7 +2282,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 <text
                   x={12}
                   y={33}
-                  fill="#e0f2fe"
+                  fill="#0F172A"
                   fontSize={9.5}
                   fontFamily="Plus Jakarta Sans, sans-serif"
                 >
@@ -2227,7 +2291,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 <text
                   x={12}
                   y={47}
-                  fill="#bae6fd"
+                  fill="#334155"
                   fontSize={9}
                   fontFamily="Plus Jakarta Sans, sans-serif"
                 >
@@ -2237,35 +2301,36 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               </g>
             )}
 
-            {/* 6. TECHNICAL TITLE BLOCK (ROZPISKA VÝKRESU) */}
-            <g transform={`translate(${canvasWidth - 415}, ${canvasHeight - 96})`}>
+            {/* 6. TECHNICAL TITLE BLOCK (ROZPISKA VÝKRESU — ČIERNO-BIELA STN) */}
+            <g transform={`translate(${canvasWidth - 465}, ${canvasHeight - 92})`}>
               <rect
                 x={0}
                 y={0}
-                width={385}
+                width={435}
                 height={68}
-                fill="#0f172a"
-                stroke="#334155"
+                fill="#FFFFFF"
+                stroke="#0F172A"
                 strokeWidth={1.5}
               />
-              <line x1={0} y1={24} x2={385} y2={24} stroke="#334155" strokeWidth={1} />
-              <line x1={0} y1={46} x2={385} y2={46} stroke="#334155" strokeWidth={1} />
-              <line x1={235} y1={0} x2={235} y2={68} stroke="#334155" strokeWidth={1} />
+              <line x1={0} y1={24} x2={435} y2={24} stroke="#0F172A" strokeWidth={1} />
+              <line x1={0} y1={46} x2={435} y2={46} stroke="#0F172A" strokeWidth={1} />
+              <line x1={280} y1={0} x2={280} y2={68} stroke="#0F172A" strokeWidth={1} />
 
               <text
                 x={10}
                 y={16}
-                fill="#f8fafc"
-                fontSize={10}
+                fill="#0F172A"
+                fontSize={9.5}
                 fontWeight="bold"
-                fontFamily="Plus Jakarta Sans, sans-serif"
+                fontFamily="Inter, Plus Jakarta Sans, sans-serif"
               >
-                NÁZOV: {project.name}
+                NÁZOV:{' '}
+                {project.name.length > 34 ? `${project.name.slice(0, 34)}…` : project.name}
               </text>
               <text
-                x={245}
+                x={290}
                 y={16}
-                fill="#fbbf24"
+                fill="#0F172A"
                 fontSize={9.5}
                 fontWeight="bold"
                 fontFamily="JetBrains Mono, monospace"
@@ -2276,16 +2341,19 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               <text
                 x={10}
                 y={39}
-                fill="#cbd5e1"
-                fontSize={9.5}
-                fontFamily="Plus Jakarta Sans, sans-serif"
+                fill="#334155"
+                fontSize={9}
+                fontFamily="Inter, Plus Jakarta Sans, sans-serif"
               >
-                Vypracoval: {project.designerName || 'Projekčná kancelária'}
+                Vypracoval:{' '}
+                {(project.designerName || 'Projekčná kancelária').length > 32
+                  ? `${(project.designerName || 'Projekčná kancelária').slice(0, 32)}…`
+                  : project.designerName || 'Projekčná kancelária'}
               </text>
               <text
-                x={245}
+                x={290}
                 y={39}
-                fill="#cbd5e1"
+                fill="#334155"
                 fontSize={9.5}
                 fontFamily="JetBrains Mono, monospace"
               >
@@ -2295,16 +2363,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               <text
                 x={10}
                 y={60}
-                fill="#94a3b8"
+                fill="#475569"
                 fontSize={9}
                 fontFamily="JetBrains Mono, monospace"
               >
                 Norma: STN EN 61439-3 / STN 33 2000-4-41
               </text>
               <text
-                x={245}
+                x={290}
                 y={60}
-                fill="#38bdf8"
+                fill="#0F172A"
                 fontSize={9.5}
                 fontWeight="bold"
                 fontFamily="JetBrains Mono, monospace"
@@ -2316,9 +2384,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Bottom Drag-and-Drop Quick Strip for Reordering Circuits */}
-      {onProjectChange && (
-        <div className="px-4 py-2 bg-[#0F172A] border-t border-slate-800 flex items-center gap-2 overflow-x-auto">
+      {/* Bottom Drag-and-Drop Quick Strip for Reordering Circuits — Hidden in print and compactMode */}
+      {!compactMode && onProjectChange && (
+        <div className="no-print print:hidden px-4 py-2 bg-[#0F172A] border-t border-slate-800 flex items-center gap-2 overflow-x-auto">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 shrink-0">
             Drag &amp; Drop poradie okruhov:
           </span>
@@ -2350,6 +2418,96 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Printable Breaker & Circuit Legend Table when printing directly from Schema Editor or Wizard */}
+      {!compactMode && (
+        <div className="hidden print:block mt-4 pt-3 border-t-2 border-slate-900 bg-white text-slate-900">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-900">
+                ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV K SCHÉME — {project.name}
+              </h3>
+              <p className="text-[10px] text-slate-600 font-mono">
+                Hlavný istič pred elektromerom ({upstreamBreaker.designation}):{' '}
+                {upstreamBreaker.enabled
+                  ? `${upstreamBreaker.poles} ${upstreamBreaker.characteristic}${upstreamBreaker.ratedCurrent} A (${upstreamBreaker.placement})`
+                  : 'Nezahrnutý'}{' '}
+                | Hlavný prvok v rozvádzači ({internalDevice.designation}):{' '}
+                {internalDevice.enabled
+                  ? `${internalDevice.deviceType} ${internalDevice.poles} ${internalDevice.hasOvercurrentProtection && internalDevice.characteristic ? internalDevice.characteristic : ''}${internalDevice.ratedCurrent} A`
+                  : 'Neosadený'}{' '}
+                | Sústava: {project.supplySystem.toUpperCase()} ({project.voltage}, {project.networkSystem})
+              </p>
+            </div>
+            <div className="text-right font-mono text-[10px] text-slate-600">
+              Č. zákazky: <strong>{project.projectNumber}</strong> | Dátum: <strong>{project.projectDate}</strong>
+            </div>
+          </div>
+
+          <table className="w-full text-left border-collapse border border-slate-900 text-[10px]">
+            <thead>
+              <tr className="bg-slate-100 text-slate-900 border-b border-slate-900 font-bold">
+                <th className="py-1 px-2 border-r border-slate-400">Istič</th>
+                <th className="py-1 px-2 border-r border-slate-400">Názov okruhu / Spotrebič (Ktorý okruh je na ističi)</th>
+                <th className="py-1 px-2 border-r border-slate-400">Typ a hodnota ističa</th>
+                <th className="py-1 px-2 border-r border-slate-400">Prúdový chránič</th>
+                <th className="py-1 px-2 border-r border-slate-400">Fáza</th>
+                <th className="py-1 px-2 border-r border-slate-400">Kábel a prierez</th>
+                <th className="py-1 px-2">Príkon</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-300 font-mono">
+              {circuits.map((c) => {
+                const rcd = rcds.find((r) => r.id === c.rcdId);
+                return (
+                  <tr key={c.id}>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold text-slate-900">
+                      {c.label}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-sans font-semibold text-slate-900">
+                      {c.name}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold">
+                      {c.poles} {c.characteristic}{c.ratedCurrent} A ({c.model})
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300">
+                      {rcd ? `${rcd.label} (${rcd.ratedCurrent}A/${rcd.sensitivity}mA)` : 'Bez FI (priamo)'}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold">{c.phase}</td>
+                    <td className="py-1 px-2 border-r border-slate-300">{c.cable}</td>
+                    <td className="py-1 px-2">{c.powerKw.toFixed(2)} kW</td>
+                  </tr>
+                );
+              })}
+              {rcds
+                .filter((r) => r.deviceKind === 'RCBO' && !circuits.some((c) => c.rcdId === r.id))
+                .map((rcbo) => (
+                  <tr key={rcbo.id}>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold text-slate-900">
+                      {rcbo.label}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-sans font-semibold text-slate-900">
+                      {rcbo.circuitName || rcbo.notes || 'Samostatný okruh RCBO'}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold">
+                      RCBO {rcbo.poles} {rcbo.characteristic || 'B'}{rcbo.ratedCurrent} A / {rcbo.sensitivity} mA ({rcbo.model})
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300">
+                      Integrovaný ističochránič ({rcbo.label}, Typ {rcbo.type})
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300 font-bold">
+                      {rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1')}
+                    </td>
+                    <td className="py-1 px-2 border-r border-slate-300">
+                      {rcbo.cableType || 'CYKY-J 3x2,5 mm²'}
+                    </td>
+                    <td className="py-1 px-2">{(rcbo.powerKw ?? 0.6).toFixed(2)} kW</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
