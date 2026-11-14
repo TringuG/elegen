@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SwitchboardProject } from '../types/electrical';
+import { SwitchboardProject, SchemaOrientation } from '../types/electrical';
 import {
   generateBom,
   calculateCircuitParameters,
@@ -26,6 +26,8 @@ import {
   RotateCcw,
   FileSpreadsheet,
   CheckCircle2,
+  RectangleVertical,
+  RectangleHorizontal,
 } from 'lucide-react';
 
 interface Props {
@@ -41,7 +43,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
   onProjectChange,
   onResetAllProjects,
 }) => {
-  const [paperFormat, setPaperFormat] = useState<'A4' | 'A3' | 'LARGE'>('A3');
+  const [paperFormat, setPaperFormat] = useState<'A4' | 'A3' | 'LARGE'>('A4');
+  const [orientation, setOrientation] = useState<SchemaOrientation>('portrait');
   const [includedSections, setIncludedSections] = useState({
     singleLineSchema: true,
     multiLineSchema: false,
@@ -227,17 +230,19 @@ export const ProfessionalExportView: React.FC<Props> = ({
   };
 
   const handleExportPdfFile = async () => {
+    const orientLabel = orientation === 'portrait' ? 'na výšku' : 'na šírku';
     setExportStatusBanner(
-      'Generujem čistý PDF dokument (elektrická schéma + rozpis ističov a okruhov)...'
+      `Generujem čistý PDF dokument (${paperFormat} ${orientLabel} • elektrická schéma + rozpis ističov a okruhov)...`
     );
     try {
       await exportCleanSchemaToPdf(project, {
         paperFormat,
+        orientation,
         includeBom: includedSections.bom,
         includeTechnicalReport: includedSections.technicalDescription,
       });
       setExportStatusBanner(
-        `PDF výkres (${project.projectNumber}_Schema_a_Istice.pdf) bol úspešne vygenerovaný a stiahnutý.`
+        `PDF výkres (${project.projectNumber}_Schema_a_Istice.pdf • ${paperFormat} ${orientLabel}) bol úspešne vygenerovaný a stiahnutý.`
       );
     } catch {
       window.print();
@@ -249,7 +254,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
   const handleExportPngFile = async () => {
     setExportStatusBanner('Generujem čistý PNG výkres (elektrická schéma + rozpis ističov)...');
     try {
-      await exportCleanSchemaToPng(project, { paperFormat });
+      await exportCleanSchemaToPng(project, { paperFormat, orientation });
       setExportStatusBanner(
         `PNG výkres (${project.projectNumber}_Schema_a_Istice.png) bol úspešne stiahnutý.`
       );
@@ -350,8 +355,24 @@ export const ProfessionalExportView: React.FC<Props> = ({
     URL.revokeObjectURL(url);
   };
 
+  const formatPresetOptions: Array<{
+    id: string;
+    label: string;
+    fmt: 'A4' | 'A3' | 'LARGE';
+    orient: SchemaOrientation;
+  }> = [
+    { id: 'A4-portrait', label: 'A4 Na výšku', fmt: 'A4', orient: 'portrait' },
+    { id: 'A4-landscape', label: 'A4 Na šírku', fmt: 'A4', orient: 'landscape' },
+    { id: 'A3-landscape', label: 'A3 Na šírku', fmt: 'A3', orient: 'landscape' },
+    { id: 'LARGE-landscape', label: 'A2 / Veľký', fmt: 'LARGE', orient: 'landscape' },
+  ];
+
   return (
     <div className="space-y-6">
+      <style>{`@media print { @page { size: ${
+        paperFormat === 'LARGE' ? 'A2' : paperFormat
+      } ${orientation}; margin: 7mm; } }`}</style>
+
       {/* Top Action & Export Control Bar (Hidden during print) */}
       <div className="no-print space-y-4">
         <div className="bg-[#0B1120] text-white rounded-2xl p-6 border border-slate-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -370,22 +391,34 @@ export const ProfessionalExportView: React.FC<Props> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Format Selector */}
-            <div className="inline-flex rounded-xl bg-[#1E293B] p-1 border border-slate-700 text-xs">
-              {(['A4', 'A3', 'LARGE'] as const).map((fmt) => (
-                <button
-                  key={fmt}
-                  type="button"
-                  onClick={() => setPaperFormat(fmt)}
-                  className={`px-3 py-1.5 rounded-lg font-mono font-bold transition-colors cursor-pointer ${
-                    paperFormat === fmt
-                      ? 'bg-[#0066FF] text-white'
-                      : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {fmt === 'LARGE' ? 'A2 / Veľký formát' : `Formát ${fmt}`}
-                </button>
-              ))}
+            {/* Format & Orientation Selector */}
+            <div className="inline-flex flex-wrap rounded-xl bg-[#1E293B] p-1 border border-slate-700 text-xs">
+              {formatPresetOptions.map((preset) => {
+                const isSelected =
+                  paperFormat === preset.fmt && orientation === preset.orient;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setPaperFormat(preset.fmt);
+                      setOrientation(preset.orient);
+                    }}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-mono font-bold transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#0066FF] text-white'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {preset.orient === 'portrait' ? (
+                      <RectangleVertical className="w-3.5 h-3.5" />
+                    ) : (
+                      <RectangleHorizontal className="w-3.5 h-3.5" />
+                    )}
+                    {preset.label}
+                  </button>
+                );
+              })}
             </div>
 
             <button
@@ -423,7 +456,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
               title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
             >
               <Download className="w-4 h-4" />
-              Exportovať / Stiahnuť PDF ({paperFormat})
+              Exportovať PDF ({paperFormat}{' '}
+              {orientation === 'portrait' ? 'na výšku' : 'na šírku'})
             </button>
 
             <button
@@ -628,6 +662,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
                 project={project}
                 displayMode="single-line"
                 onDisplayModeChange={() => {}}
+                orientation={orientation}
+                onOrientationChange={setOrientation}
                 compactMode={true}
               />
             </div>
@@ -645,6 +681,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
                 project={project}
                 displayMode="multi-line"
                 onDisplayModeChange={() => {}}
+                orientation={orientation}
+                onOrientationChange={setOrientation}
                 compactMode={true}
               />
             </div>
@@ -662,6 +700,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
                 project={project}
                 displayMode="wiring-diagram"
                 onDisplayModeChange={() => {}}
+                orientation={orientation}
+                onOrientationChange={setOrientation}
                 compactMode={true}
               />
             </div>
@@ -670,23 +710,27 @@ export const ProfessionalExportView: React.FC<Props> = ({
 
         {/* 5. Circuit List & Calculation Report */}
         {includedSections.circuitList && (
-          <section className="space-y-2.5 break-inside-avoid">
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+          <section
+            className={`space-y-2.5 break-inside-avoid ${
+              orientation === 'portrait' ? 'print:break-before-page' : ''
+            }`}
+          >
+            <h3 className="text-sm sm:text-base font-extrabold uppercase tracking-wider text-black border-b-2 border-black pb-1">
               Rozpis ističov a elektrických okruhov (Ktorý okruh je na ktorom ističi)
             </h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse border border-slate-300 text-[11px]">
+              <table className="w-full text-left border-collapse border-2 border-black text-xs sm:text-[13px] text-black">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                    <th className="py-2 px-2.5 border-r border-slate-300">Istič</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Názov okruhu / Spotrebič</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Typ a hodnota ističa</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Chránič (RCD)</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Fáza</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Kábel / Dĺžka</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Príkon P</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Prúd Ib / Iz</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Úbytok ΔU</th>
+                  <tr className="bg-slate-200 text-black border-b-2 border-black">
+                    <th className="py-2 px-2.5 border-r border-slate-500">Istič</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Názov okruhu / Spotrebič</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Typ a hodnota ističa</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Chránič (RCD)</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Fáza</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Kábel / Dĺžka</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Príkon P</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Prúd Ib / Iz</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Úbytok ΔU</th>
                     <th className="py-2 px-2.5">Slučka Zs</th>
                   </tr>
                 </thead>
@@ -780,20 +824,20 @@ export const ProfessionalExportView: React.FC<Props> = ({
         {/* 6. Bill of Materials (Výkaz materiálu - Kusovník BOM) */}
         {includedSections.bom && (
           <section className="space-y-2.5 break-inside-avoid">
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+            <h3 className="text-sm sm:text-base font-extrabold uppercase tracking-wider text-black border-b-2 border-black pb-1">
               6. Výkaz materiálu (Kusovník prístrojov – BOM)
             </h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse border border-slate-300 text-[11px]">
+              <table className="w-full text-left border-collapse border-2 border-black text-xs sm:text-[13px] text-black">
                 <thead>
-                  <tr className="bg-slate-100 text-slate-800 border-b border-slate-300">
-                    <th className="py-2 px-2.5 border-r border-slate-300">Kód</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Označenie v schéme</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Kategória</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Popis komponentu</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Výrobca / Model</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300">Kat. číslo</th>
-                    <th className="py-2 px-2.5 border-r border-slate-300 text-center">Moduly</th>
+                  <tr className="bg-slate-200 text-black border-b-2 border-black">
+                    <th className="py-2 px-2.5 border-r border-slate-500">Kód</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Označenie v schéme</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Kategória</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Popis komponentu</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Výrobca / Model</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500">Kat. číslo</th>
+                    <th className="py-2 px-2.5 border-r border-slate-500 text-center">Moduly</th>
                     <th className="py-2 px-2.5 text-center">Počet ks</th>
                   </tr>
                 </thead>
@@ -989,7 +1033,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
                 Číslo výkresu / Formát:
               </div>
               <div className="font-bold text-slate-900 mt-0.5">
-                {project.projectNumber} • {paperFormat}
+                {project.projectNumber} • {paperFormat} (
+                {orientation === 'portrait' ? 'na výšku' : 'na šírku'})
               </div>
               <div className="text-[10px] text-slate-500 mt-2">
                 Dátum: {project.projectDate}

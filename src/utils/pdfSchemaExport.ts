@@ -1,4 +1,8 @@
-import { SwitchboardProject, SchemaDisplayMode } from '../types/electrical';
+import {
+  SwitchboardProject,
+  SchemaDisplayMode,
+  SchemaOrientation,
+} from '../types/electrical';
 import {
   calculateCircuitParameters,
   generateBom,
@@ -10,6 +14,7 @@ import {
 
 export interface PdfExportOptions {
   paperFormat?: 'A4' | 'A3' | 'LARGE';
+  orientation?: SchemaOrientation;
   displayMode?: SchemaDisplayMode;
   includeBom?: boolean;
   includeTechnicalReport?: boolean;
@@ -131,8 +136,8 @@ async function renderSvgElementToImage(
   const clone = svgEl.cloneNode(true) as SVGSVGElement;
 
   const viewBoxAttr = clone.getAttribute('viewBox');
-  let vbWidth = 1260;
-  let vbHeight = 940;
+  let vbWidth = 960;
+  let vbHeight = 1350;
   if (viewBoxAttr) {
     const parts = viewBoxAttr
       .trim()
@@ -182,6 +187,115 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number):
   return truncated + '…';
 }
 
+/**
+ * Wraps text across up to `maxLines` lines fitting `maxWidth` on a 2D canvas.
+ */
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines = 2
+): string[] {
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+    } else {
+      if (current) {
+        lines.push(current);
+        current = word;
+      } else {
+        lines.push(fitText(ctx, word, maxWidth));
+        current = '';
+      }
+      if (lines.length >= maxLines) break;
+    }
+  }
+  if (current && lines.length < maxLines) {
+    lines.push(fitText(ctx, current, maxWidth));
+  } else if (current && lines.length === maxLines) {
+    lines[maxLines - 1] = fitText(ctx, lines[maxLines - 1] + ' ' + current, maxWidth);
+  }
+  return lines.length > 0 ? lines : [fitText(ctx, text, maxWidth)];
+}
+
+/**
+ * Finds clean horizontal white-band slice intervals on a rendered schematic canvas
+ * so tall multi-row portrait diagrams paginate cleanly between rows without cutting text or boxes.
+ */
+function computeCleanSchematicSlices(
+  offCanvas: HTMLCanvasElement,
+  maxSliceH: number
+): Array<{ sy: number; sh: number }> {
+  const totalH = offCanvas.height;
+  const totalW = offCanvas.width;
+  if (totalH <= maxSliceH) {
+    return [{ sy: 0, sh: totalH }];
+  }
+
+  const offCtx = offCanvas.getContext('2d');
+  if (!offCtx) {
+    const fallback: Array<{ sy: number; sh: number }> = [];
+    for (let y = 0; y < totalH; y += maxSliceH) {
+      fallback.push({ sy: y, sh: Math.min(maxSliceH, totalH - y) });
+    }
+    return fallback;
+  }
+
+  const scanXStart = Math.round(totalW * 0.12);
+  const scanXEnd = Math.round(totalW * 0.95);
+  const imageData = offCtx.getImageData(0, 0, totalW, totalH).data;
+
+  const isRowWhite = (y: number): boolean => {
+    const rowOffset = y * totalW * 4;
+    for (let x = scanXStart; x < scanXEnd; x += 4) {
+      const idx = rowOffset + x * 4;
+      if (imageData[idx] < 248 || imageData[idx + 1] < 248 || imageData[idx + 2] < 248) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const slices: Array<{ sy: number; sh: number }> = [];
+  let sy = 0;
+
+  while (sy < totalH) {
+    const remaining = totalH - sy;
+    if (remaining <= maxSliceH) {
+      slices.push({ sy, sh: remaining });
+      break;
+    }
+
+    const idealEnd = sy + maxSliceH;
+    const minCutY = sy + Math.round(maxSliceH * 0.42);
+    let bestCutY = idealEnd;
+
+    let bandHeight = 0;
+    for (let y = idealEnd - 4; y >= minCutY; y--) {
+      if (isRowWhite(y)) {
+        bandHeight++;
+        if (bandHeight >= 14) {
+          bestCutY = y + Math.floor(bandHeight / 2);
+          break;
+        }
+      } else {
+        bandHeight = 0;
+      }
+    }
+
+    const sh = Math.max(200, bestCutY - sy);
+    slices.push({ sy, sh });
+    sy += sh;
+  }
+
+  return slices;
+}
+
 export interface BreakerScheduleRow {
   label: string;
   name: string;
@@ -191,6 +305,8 @@ export interface BreakerScheduleRow {
   cableSpec: string;
   powerText: string;
   currentText: string;
+  dropText: string;
+  zsText: string;
   dropAndZsText: string;
 }
 
@@ -215,6 +331,8 @@ export function buildBreakerScheduleRows(project: SwitchboardProject): BreakerSc
       cableSpec: `${c.cableText} (${c.lengthM} m)`,
       powerText: `${c.powerKw.toFixed(2)} kW`,
       currentText: `${c.designCurrentIb} A / ${c.currentCarryingCapacityIz} A`,
+      dropText: `${c.voltageDropPercent}%`,
+      zsText: `${c.loopImpedanceZsOhm} Ω`,
       dropAndZsText: `${c.voltageDropPercent}% / ${c.loopImpedanceZsOhm} Ω`,
     });
   });
@@ -234,6 +352,8 @@ export function buildBreakerScheduleRows(project: SwitchboardProject): BreakerSc
         cableSpec: `${rcbo.cableType || 'CYKY-J 3x2,5 mm²'} (${rcbo.cableLengthM || 15} m)`,
         powerText: `${pKw.toFixed(2)} kW`,
         currentText: `${ib} A / 24 A`,
+        dropText: '0.35%',
+        zsText: '0.52 Ω',
         dropAndZsText: `0.35% / 0.52 Ω`,
       });
     });
@@ -242,8 +362,165 @@ export function buildBreakerScheduleRows(project: SwitchboardProject): BreakerSc
 }
 
 /**
+ * Draws the shared outer STN EN ISO 5457 frame, top header, and bottom STN ISO 7200 stamp
+ * onto a Portrait A4 sheet (1800 x 2545 px).
+ */
+function drawPortraitA4Chrome(
+  ctx: CanvasRenderingContext2D,
+  project: SwitchboardProject,
+  pageW: number,
+  pageH: number,
+  margin: number,
+  subtitleTag: string,
+  formatLabel: string
+): { contentW: number; bodyTopY: number; bodyAvailH: number } {
+  const contentW = pageW - margin * 2;
+  const headerH = 152;
+  const footerStampH = 118;
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, pageW, pageH);
+
+  // Outer engineering border (STN EN ISO 5457)
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 3.5;
+  ctx.strokeRect(margin - 16, margin - 16, contentW + 32, pageH - (margin - 16) * 2);
+
+  const upstream = getEffectiveUpstreamBreaker(project);
+  const internalDev = getEffectiveInternalDevice(project);
+  const din = calculateDinRailAllocation(project);
+
+  // 1. TOP HEADER
+  const curY = margin;
+  ctx.fillStyle = '#F8FAFC';
+  ctx.fillRect(margin, curY, contentW, headerH);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(margin, curY, contentW, headerH);
+
+  const metaBoxW = 430;
+  const metaBoxX = margin + contentW - metaBoxW;
+  const leftTextW = contentW - metaBoxW - 36;
+
+  ctx.fillStyle = '#0052CC';
+  ctx.font = 'bold 21px "JetBrains Mono", monospace';
+  ctx.fillText(fitText(ctx, subtitleTag, leftTextW), margin + 22, curY + 34);
+
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 33px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(fitText(ctx, project.name, leftTextW), margin + 22, curY + 76);
+
+  const upstreamSummary = upstream.enabled
+    ? `${upstream.designation}: ${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent}A`
+    : `${upstream.designation}: Nezahrnutý`;
+  const internalSummary = internalDev.enabled
+    ? `${internalDev.designation}: ${internalDev.deviceType} ${internalDev.poles} ${internalDev.ratedCurrent}A`
+    : 'Bez hl. prvku';
+
+  ctx.fillStyle = '#0F172A';
+  ctx.font = 'bold 19px "JetBrains Mono", monospace';
+  ctx.fillText(
+    fitText(
+      ctx,
+      `${upstreamSummary} | ${internalSummary} | ${project.supplySystem.toUpperCase()} (${project.voltage}, ${project.networkSystem})`,
+      leftTextW
+    ),
+    margin + 22,
+    curY + 109
+  );
+  ctx.fillStyle = '#1E293B';
+  ctx.font = '600 18px "JetBrains Mono", monospace';
+  ctx.fillText(
+    fitText(ctx, `Prívod: ${project.supplyCable} | Krytie: ${project.ipRating}`, leftTextW),
+    margin + 22,
+    curY + 136
+  );
+
+  // Right metadata box
+  ctx.beginPath();
+  ctx.moveTo(metaBoxX, curY);
+  ctx.lineTo(metaBoxX, curY + headerH);
+  ctx.stroke();
+
+  ctx.fillStyle = '#0F172A';
+  ctx.font = 'bold 19px "JetBrains Mono", monospace';
+  ctx.fillText(fitText(ctx, `Projekt: ${project.projectNumber}`, metaBoxW - 32), metaBoxX + 18, curY + 42);
+  ctx.fillText(`Dátum: ${project.projectDate}`, metaBoxX + 18, curY + 76);
+  ctx.fillText(
+    `DIN: ${din.totalUsedModules} / ${din.totalCapacityModules} M (${project.ipRating})`,
+    metaBoxX + 18,
+    curY + 110
+  );
+  ctx.fillStyle = '#0052CC';
+  ctx.fillText(formatLabel, metaBoxX + 18, curY + 140);
+
+  // 2. BOTTOM STN ISO 7200 TITLE BLOCK STAMP
+  const stampY = pageH - margin - footerStampH;
+  ctx.fillStyle = '#F8FAFC';
+  ctx.fillRect(margin, stampY, contentW, footerStampH);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(margin, stampY, contentW, footerStampH);
+
+  const col1W = 540;
+  const col2W = 640;
+  const col3W = contentW - col1W - col2W;
+
+  ctx.beginPath();
+  ctx.moveTo(margin + col1W, stampY);
+  ctx.lineTo(margin + col1W, stampY + footerStampH);
+  ctx.moveTo(margin + col1W + col2W, stampY);
+  ctx.lineTo(margin + col1W + col2W, stampY + footerStampH);
+  ctx.stroke();
+
+  ctx.fillStyle = '#334155';
+  ctx.font = 'bold 16px "JetBrains Mono", monospace';
+  ctx.fillText('ZODPOVEDNÝ PROJEKTANT:', margin + 18, stampY + 29);
+  ctx.fillText('NÁZOV VÝKRESU / ROZVÁDZAČA:', margin + col1W + 18, stampY + 29);
+  ctx.fillText('VÝKRES / FORMÁT / REVÍZIA:', margin + col1W + col2W + 18, stampY + 29);
+
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(fitText(ctx, project.designerName, col1W - 34), margin + 18, stampY + 66);
+  ctx.fillText(fitText(ctx, project.name, col2W - 34), margin + col1W + 18, stampY + 66);
+  ctx.font = 'bold 21px "JetBrains Mono", monospace';
+  ctx.fillText(
+    fitText(ctx, `${project.projectNumber} • ${formatLabel}`, col3W - 34),
+    margin + col1W + col2W + 18,
+    stampY + 66
+  );
+
+  ctx.fillStyle = '#1E293B';
+  ctx.font = '600 18px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(
+    fitText(ctx, `Miesto: ${project.locationCity || 'Bratislava'}`, col1W - 34),
+    margin + 18,
+    stampY + 99
+  );
+  ctx.fillText(
+    fitText(
+      ctx,
+      `Sústava: ${project.supplySystem.toUpperCase()} / ${project.voltage} / ${project.networkSystem}`,
+      col2W - 34
+    ),
+    margin + col1W + 18,
+    stampY + 99
+  );
+  ctx.fillText(
+    fitText(ctx, `STN 33 2000-6 • ${project.projectDate}`, col3W - 34),
+    margin + col1W + col2W + 18,
+    stampY + 99
+  );
+
+  const bodyTopY = curY + headerH + 20;
+  const bodyAvailH = stampY - 20 - bodyTopY;
+
+  return { contentW, bodyTopY, bodyAvailH };
+}
+
+/**
  * Renders the clean engineering drawing page(s) (Pure Schematic + Breaker-to-Circuit Schedule Table)
- * onto high-resolution HTML5 Canvas element(s).
+ * onto high-resolution HTML5 Canvas element(s), optimized for A4 Portrait or A3/A4 Landscape printing.
  */
 export async function renderCleanSchemaPagesToCanvases(
   project: SwitchboardProject,
@@ -253,15 +530,12 @@ export async function renderCleanSchemaPagesToCanvases(
     options.svgElement ||
     (document.querySelector('svg.schema-canvas-svg') as SVGSVGElement | null);
 
-  const upstream = getEffectiveUpstreamBreaker(project);
-  const internalDev = getEffectiveInternalDevice(project);
-  const din = calculateDinRailAllocation(project);
-  const breakerRows = buildBreakerScheduleRows(project);
+  const orientation: SchemaOrientation =
+    options.orientation ??
+    (options.paperFormat === 'A3' || options.paperFormat === 'LARGE' ? 'landscape' : 'portrait');
+  const paperFormat = options.paperFormat ?? (orientation === 'portrait' ? 'A4' : 'A3');
 
-  // High-resolution engineering sheet width (2400 px for crisp text and vector-like lines)
-  const pageW = 2400;
-  const margin = 56;
-  const contentW = pageW - margin * 2;
+  const breakerRows = buildBreakerScheduleRows(project);
 
   // Render SVG schematic if available
   let svgRendered: { img: HTMLImageElement; width: number; height: number } | null = null;
@@ -273,22 +547,451 @@ export async function renderCleanSchemaPagesToCanvases(
     }
   }
 
+  // ===========================================================================
+  // MODE A: PORTRAIT A4 (NA VÝŠKU) — ČITATEĽNÉ VEĽKÉ PÍSMO NA TLAČIARNI A4
+  // ===========================================================================
+  if (orientation === 'portrait') {
+    const pageW = 1800; // Exact ISO A4 Portrait ratio (1 : 1.414)
+    const pageH = 2545;
+    const margin = 56;
+    const contentW = pageW - margin * 2;
+    const canvases: HTMLCanvasElement[] = [];
+
+    // 1. Rasterize SVG at full A4 Portrait content width so zero text shrinks
+    if (svgRendered) {
+      const targetW = contentW;
+      const targetH = Math.max(
+        400,
+        Math.round((svgRendered.height / svgRendered.width) * targetW)
+      );
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = targetW;
+      offCanvas.height = targetH;
+      const offCtx = offCanvas.getContext('2d')!;
+      offCtx.fillStyle = '#FFFFFF';
+      offCtx.fillRect(0, 0, targetW, targetH);
+      offCtx.drawImage(svgRendered.img, 0, 0, targetW, targetH);
+
+      // Probe body height using temporary page geometry
+      const headerH = 152;
+      const footerStampH = 118;
+      const maxSchematicH = pageH - margin - headerH - 20 - 20 - footerStampH - margin;
+      const slices = computeCleanSchematicSlices(offCanvas, maxSchematicH);
+
+      slices.forEach((slice, sliceIdx) => {
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = pageW;
+        pageCanvas.height = pageH;
+        const pCtx = pageCanvas.getContext('2d')!;
+
+        const subtitle =
+          slices.length > 1
+            ? `ELEKTRICKÁ SCHÉMA ROZVÁDZAČA (ČASŤ ${sliceIdx + 1}/${slices.length}) • STN EN 61439-3`
+            : 'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617';
+
+        const { bodyTopY } = drawPortraitA4Chrome(
+          pCtx,
+          project,
+          pageW,
+          pageH,
+          margin,
+          subtitle,
+          `${paperFormat} NA VÝŠKU`
+        );
+
+        pCtx.fillStyle = '#FFFFFF';
+        pCtx.fillRect(margin, bodyTopY, contentW, slice.sh);
+        pCtx.drawImage(
+          offCanvas,
+          0,
+          slice.sy,
+          targetW,
+          slice.sh,
+          margin,
+          bodyTopY,
+          contentW,
+          slice.sh
+        );
+        pCtx.strokeStyle = '#000000';
+        pCtx.lineWidth = 2.5;
+        pCtx.strokeRect(margin, bodyTopY, contentW, slice.sh);
+
+        canvases.push(pageCanvas);
+      });
+    } else {
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = pageW;
+      pageCanvas.height = pageH;
+      const pCtx = pageCanvas.getContext('2d')!;
+      const { bodyTopY } = drawPortraitA4Chrome(
+        pCtx,
+        project,
+        pageW,
+        pageH,
+        margin,
+        'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617',
+        `${paperFormat} NA VÝŠKU`
+      );
+      pCtx.fillStyle = '#000000';
+      pCtx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
+      pCtx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 32, bodyTopY + 64);
+      canvases.push(pageCanvas);
+    }
+
+    // 2. Dedicated A4 Portrait Page(s) for Breaker-to-Circuit Schedule (veľké čitateľné písmo)
+    const tableCols = [
+      { title: 'Istič', width: 130 },
+      { title: 'Okruh / Spotrebič na ističi', width: 495 },
+      { title: 'Istič a prúdový chránič (RCD)', width: 345 },
+      { title: 'Fáza a napájací kábel', width: 315 },
+      { title: 'Príkon / Ib / Iz', width: 215 },
+      { title: 'ΔU / Zs', width: contentW - 1500 },
+    ];
+    const sectionTitleH = 58;
+    const tableHeaderH = 54;
+    const rowH = 74;
+
+    const sampleAvailH = pageH - margin - 152 - 20 - 20 - 118 - margin;
+    const rowsPerPage = Math.max(
+      8,
+      Math.floor((sampleAvailH - sectionTitleH - tableHeaderH - 12) / rowH)
+    );
+    const totalTablePages = Math.max(1, Math.ceil(breakerRows.length / rowsPerPage));
+
+    for (let p = 0; p < totalTablePages; p++) {
+      const sliceRows = breakerRows.slice(p * rowsPerPage, (p + 1) * rowsPerPage);
+      const tCanvas = document.createElement('canvas');
+      tCanvas.width = pageW;
+      tCanvas.height = pageH;
+      const tCtx = tCanvas.getContext('2d')!;
+
+      const { bodyTopY } = drawPortraitA4Chrome(
+        tCtx,
+        project,
+        pageW,
+        pageH,
+        margin,
+        totalTablePages > 1
+          ? `ROZPIS ISTIČOV A OKRUHOV (STRANA ${p + 1}/${totalTablePages}) • STN EN 61439-3`
+          : 'ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV • STN EN 61439-3',
+        `${paperFormat} NA VÝŠKU`
+      );
+
+      let curY = bodyTopY;
+
+      // Section Banner
+      tCtx.fillStyle = '#0F172A';
+      tCtx.fillRect(margin, curY, contentW, sectionTitleH);
+      tCtx.fillStyle = '#FFFFFF';
+      tCtx.font = 'bold 23px "Plus Jakarta Sans", sans-serif';
+      tCtx.fillText(
+        totalTablePages > 1
+          ? `POPIS K SCHÉME — ROZPIS ISTIČOV A OKRUHOV (${p + 1}/${totalTablePages})`
+          : 'POPIS K SCHÉME — ROZPIS ISTIČOV A OKRUHOV (KTORÝ OKRUH JE NA KTOROM ISTIČI)',
+        margin + 20,
+        curY + 37
+      );
+      curY += sectionTitleH;
+
+      // Table Header Row
+      tCtx.fillStyle = '#E2E8F0';
+      tCtx.fillRect(margin, curY, contentW, tableHeaderH);
+      tCtx.strokeStyle = '#000000';
+      tCtx.lineWidth = 2;
+      tCtx.strokeRect(margin, curY, contentW, tableHeaderH);
+
+      let colX = margin;
+      tCtx.fillStyle = '#000000';
+      tCtx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
+      tableCols.forEach((col, i) => {
+        tCtx.fillText(fitText(tCtx, col.title, col.width - 20), colX + 14, curY + 34);
+        colX += col.width;
+        if (i < tableCols.length - 1) {
+          tCtx.beginPath();
+          tCtx.moveTo(colX, curY);
+          tCtx.lineTo(colX, curY + tableHeaderH);
+          tCtx.stroke();
+        }
+      });
+      curY += tableHeaderH;
+
+      const tableStartY = curY;
+
+      sliceRows.forEach((row, rIdx) => {
+        tCtx.fillStyle = rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+        tCtx.fillRect(margin, curY, contentW, rowH);
+        tCtx.strokeStyle = '#94A3B8';
+        tCtx.lineWidth = 1.5;
+        tCtx.strokeRect(margin, curY, contentW, rowH);
+
+        let cx = margin;
+
+        // Col 0: Istič (FA1)
+        tCtx.fillStyle = '#0052CC';
+        tCtx.font = 'bold 24px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.label, tableCols[0].width - 20), cx + 14, curY + 45);
+        cx += tableCols[0].width;
+
+        // Vertical separator
+        tCtx.strokeStyle = '#CBD5E1';
+        tCtx.beginPath();
+        tCtx.moveTo(cx, curY);
+        tCtx.lineTo(cx, curY + rowH);
+        tCtx.stroke();
+
+        // Col 1: Okruh / Spotrebič (2 lines)
+        tCtx.fillStyle = '#000000';
+        tCtx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
+        const nameLines = wrapCanvasText(tCtx, row.name, tableCols[1].width - 24, 2);
+        if (nameLines.length === 1) {
+          tCtx.fillText(nameLines[0], cx + 14, curY + 44);
+        } else {
+          tCtx.fillText(nameLines[0], cx + 14, curY + 31);
+          tCtx.fillText(nameLines[1], cx + 14, curY + 58);
+        }
+        cx += tableCols[1].width;
+        tCtx.beginPath();
+        tCtx.moveTo(cx, curY);
+        tCtx.lineTo(cx, curY + rowH);
+        tCtx.stroke();
+
+        // Col 2: Istič & RCD
+        tCtx.fillStyle = '#000000';
+        tCtx.font = 'bold 19px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.breakerSpec, tableCols[2].width - 22), cx + 12, curY + 30);
+        tCtx.fillStyle = '#1E293B';
+        tCtx.font = '600 18px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.rcdSpec, tableCols[2].width - 22), cx + 12, curY + 57);
+        cx += tableCols[2].width;
+        tCtx.beginPath();
+        tCtx.moveTo(cx, curY);
+        tCtx.lineTo(cx, curY + rowH);
+        tCtx.stroke();
+
+        // Col 3: Fáza & Kábel
+        tCtx.fillStyle = '#000000';
+        tCtx.font = 'bold 19px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, `Fáza: ${row.phase}`, tableCols[3].width - 22), cx + 12, curY + 30);
+        tCtx.fillStyle = '#1E293B';
+        tCtx.font = '600 18px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.cableSpec, tableCols[3].width - 22), cx + 12, curY + 57);
+        cx += tableCols[3].width;
+        tCtx.beginPath();
+        tCtx.moveTo(cx, curY);
+        tCtx.lineTo(cx, curY + rowH);
+        tCtx.stroke();
+
+        // Col 4: Príkon / Ib / Iz
+        tCtx.fillStyle = '#000000';
+        tCtx.font = 'bold 19px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.powerText, tableCols[4].width - 22), cx + 12, curY + 30);
+        tCtx.fillStyle = '#1E293B';
+        tCtx.font = '600 18px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, row.currentText, tableCols[4].width - 22), cx + 12, curY + 57);
+        cx += tableCols[4].width;
+        tCtx.beginPath();
+        tCtx.moveTo(cx, curY);
+        tCtx.lineTo(cx, curY + rowH);
+        tCtx.stroke();
+
+        // Col 5: ΔU / Zs
+        tCtx.fillStyle = '#000000';
+        tCtx.font = 'bold 19px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, `ΔU: ${row.dropText}`, tableCols[5].width - 20), cx + 12, curY + 30);
+        tCtx.fillStyle = '#1E293B';
+        tCtx.font = '600 18px "JetBrains Mono", monospace';
+        tCtx.fillText(fitText(tCtx, `Zs: ${row.zsText}`, tableCols[5].width - 20), cx + 12, curY + 57);
+
+        curY += rowH;
+      });
+
+      // Outer border around table
+      tCtx.strokeStyle = '#000000';
+      tCtx.lineWidth = 2.5;
+      tCtx.strokeRect(
+        margin,
+        tableStartY - tableHeaderH - sectionTitleH,
+        contentW,
+        sectionTitleH + tableHeaderH + sliceRows.length * rowH
+      );
+
+      canvases.push(tCanvas);
+    }
+
+    // 3. Optional Bill of Materials (Kusovník) on Portrait A4 Page(s)
+    if (options.includeBom) {
+      const bom = generateBom(project);
+      const bomCols = [
+        { title: 'Kód', width: 130 },
+        { title: 'Označenie', width: 220 },
+        { title: 'Špecifikácia prístroja', width: 575 },
+        { title: 'Výrobca a model / Kat. č.', width: 470 },
+        { title: 'Mod. / Ks', width: contentW - 1395 },
+      ];
+      const bomSectionH = 58;
+      const bomHeaderH = 54;
+      const bomRowH = 72;
+      const bomRowsPerPage = Math.max(
+        8,
+        Math.floor((sampleAvailH - bomSectionH - bomHeaderH - 12) / bomRowH)
+      );
+      const totalBomPages = Math.max(1, Math.ceil(bom.length / bomRowsPerPage));
+
+      for (let bp = 0; bp < totalBomPages; bp++) {
+        const bomSlice = bom.slice(bp * bomRowsPerPage, (bp + 1) * bomRowsPerPage);
+        const bCanvas = document.createElement('canvas');
+        bCanvas.width = pageW;
+        bCanvas.height = pageH;
+        const bCtx = bCanvas.getContext('2d')!;
+
+        const { bodyTopY } = drawPortraitA4Chrome(
+          bCtx,
+          project,
+          pageW,
+          pageH,
+          margin,
+          totalBomPages > 1
+            ? `VÝKAZ MATERIÁLU — KUSOVNÍK BOM (${bp + 1}/${totalBomPages}) • STN EN 61439-3`
+            : 'VÝKAZ MATERIÁLU — KUSOVNÍK PRÍSTROJOV (BOM) • STN EN 61439-3',
+          `${paperFormat} NA VÝŠKU`
+        );
+
+        let y2 = bodyTopY;
+        bCtx.fillStyle = '#0F172A';
+        bCtx.fillRect(margin, y2, contentW, bomSectionH);
+        bCtx.fillStyle = '#FFFFFF';
+        bCtx.font = 'bold 23px "Plus Jakarta Sans", sans-serif';
+        bCtx.fillText(
+          `PRÍLOHA — VÝKAZ MATERIÁLU (KUSOVNÍK PRÍSTROJOV BOM)`,
+          margin + 20,
+          y2 + 37
+        );
+        y2 += bomSectionH;
+
+        bCtx.fillStyle = '#E2E8F0';
+        bCtx.fillRect(margin, y2, contentW, bomHeaderH);
+        bCtx.strokeStyle = '#000000';
+        bCtx.lineWidth = 2;
+        bCtx.strokeRect(margin, y2, contentW, bomHeaderH);
+
+        let bx = margin;
+        bCtx.fillStyle = '#000000';
+        bCtx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
+        bomCols.forEach((col, idx) => {
+          bCtx.fillText(fitText(bCtx, col.title, col.width - 20), bx + 14, y2 + 34);
+          bx += col.width;
+          if (idx < bomCols.length - 1) {
+            bCtx.beginPath();
+            bCtx.moveTo(bx, y2);
+            bCtx.lineTo(bx, y2 + bomHeaderH);
+            bCtx.stroke();
+          }
+        });
+        y2 += bomHeaderH;
+
+        const bomStartY = y2;
+        bomSlice.forEach((b, rIdx) => {
+          bCtx.fillStyle = rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+          bCtx.fillRect(margin, y2, contentW, bomRowH);
+          bCtx.strokeStyle = '#94A3B8';
+          bCtx.lineWidth = 1.5;
+          bCtx.strokeRect(margin, y2, contentW, bomRowH);
+
+          let cx = margin;
+          bCtx.fillStyle = '#0052CC';
+          bCtx.font = 'bold 21px "JetBrains Mono", monospace';
+          bCtx.fillText(fitText(bCtx, b.code, bomCols[0].width - 20), cx + 14, y2 + 44);
+          cx += bomCols[0].width;
+
+          bCtx.fillStyle = '#000000';
+          bCtx.font = 'bold 20px "JetBrains Mono", monospace';
+          bCtx.fillText(fitText(bCtx, b.designation, bomCols[1].width - 20), cx + 14, y2 + 31);
+          bCtx.fillStyle = '#334155';
+          bCtx.font = '600 17px "Plus Jakarta Sans", sans-serif';
+          bCtx.fillText(fitText(bCtx, b.category, bomCols[1].width - 20), cx + 14, y2 + 56);
+          cx += bomCols[1].width;
+
+          bCtx.fillStyle = '#000000';
+          bCtx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
+          const descLines = wrapCanvasText(bCtx, b.description, bomCols[2].width - 22, 2);
+          if (descLines.length === 1) {
+            bCtx.fillText(descLines[0], cx + 14, y2 + 44);
+          } else {
+            bCtx.fillText(descLines[0], cx + 14, y2 + 31);
+            bCtx.fillText(descLines[1], cx + 14, y2 + 57);
+          }
+          cx += bomCols[2].width;
+
+          bCtx.fillStyle = '#000000';
+          bCtx.font = 'bold 19px "JetBrains Mono", monospace';
+          bCtx.fillText(
+            fitText(bCtx, `${b.manufacturer} ${b.model}`, bomCols[3].width - 22),
+            cx + 14,
+            y2 + 31
+          );
+          bCtx.fillStyle = '#334155';
+          bCtx.font = '600 18px "JetBrains Mono", monospace';
+          bCtx.fillText(fitText(bCtx, b.catalogNumber, bomCols[3].width - 22), cx + 14, y2 + 56);
+          cx += bomCols[3].width;
+
+          bCtx.fillStyle = '#000000';
+          bCtx.font = 'bold 21px "JetBrains Mono", monospace';
+          bCtx.fillText(`${b.quantity} ks`, cx + 14, y2 + 31);
+          bCtx.fillStyle = '#334155';
+          bCtx.font = '600 18px "JetBrains Mono", monospace';
+          bCtx.fillText(b.modules > 0 ? `${b.modules} M` : '-', cx + 14, y2 + 56);
+
+          y2 += bomRowH;
+        });
+
+        bCtx.strokeStyle = '#000000';
+        bCtx.lineWidth = 2.5;
+        bCtx.strokeRect(
+          margin,
+          bomStartY - bomHeaderH - bomSectionH,
+          contentW,
+          bomSectionH + bomHeaderH + bomSlice.length * bomRowH
+        );
+
+        canvases.push(bCanvas);
+      }
+    }
+
+    return canvases;
+  }
+
+  // ===========================================================================
+  // MODE B: LANDSCAPE (NA ŠÍRKU) — A4 / A3 / A2 S VÄČŠÍMI A KONTRASTNEJŠÍMI FONTMI
+  // ===========================================================================
+  const upstream = getEffectiveUpstreamBreaker(project);
+  const internalDev = getEffectiveInternalDevice(project);
+  const din = calculateDinRailAllocation(project);
+
+  const pageW = 2400;
+  const margin = 56;
+  const contentW = pageW - margin * 2;
+
   const schemaDrawW = contentW;
   const schemaDrawH = svgRendered
     ? Math.round((svgRendered.height / svgRendered.width) * schemaDrawW)
     : 760;
 
-  const headerH = 118;
-  const sectionTitleH = 44;
-  const tableHeaderH = 42;
-  const tableRowH = 36;
-  const tableTotalH = sectionTitleH + tableHeaderH + Math.max(1, breakerRows.length) * tableRowH + 20;
-  const footerStampH = 92;
+  const headerH = 128;
+  const sectionTitleH = 50;
+  const tableHeaderH = 48;
+  const tableRowH = 46;
+  const tableTotalH =
+    sectionTitleH + tableHeaderH + Math.max(1, breakerRows.length) * tableRowH + 20;
+  const footerStampH = 104;
 
-  const page1H = Math.max(
-    1680,
-    margin + headerH + 22 + schemaDrawH + 28 + tableTotalH + 24 + footerStampH + margin
-  );
+  // For A4 landscape or large schematics, move the schedule table to Page 2 so nothing shrinks below readable pt
+  const combinedH =
+    margin + headerH + 24 + schemaDrawH + 28 + tableTotalH + 24 + footerStampH + margin;
+  const splitScheduleToSeparatePage = paperFormat === 'A4' || combinedH > 1950;
+
+  const page1H = splitScheduleToSeparatePage
+    ? Math.max(1697, margin + headerH + 24 + schemaDrawH + 24 + footerStampH + margin)
+    : Math.max(1697, combinedH);
 
   const canvas1 = document.createElement('canvas');
   canvas1.width = pageW;
@@ -300,8 +1003,8 @@ export async function renderCleanSchemaPagesToCanvases(
   ctx.fillRect(0, 0, pageW, page1H);
 
   // Outer engineering border (STN EN ISO 5457)
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 3.5;
   ctx.strokeRect(margin - 16, margin - 16, contentW + 32, page1H - (margin - 16) * 2);
 
   let curY = margin;
@@ -309,21 +1012,21 @@ export async function renderCleanSchemaPagesToCanvases(
   // 1. TOP DRAWING HEADER
   ctx.fillStyle = '#F8FAFC';
   ctx.fillRect(margin, curY, contentW, headerH);
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2.5;
   ctx.strokeRect(margin, curY, contentW, headerH);
 
-  ctx.fillStyle = '#0066FF';
-  ctx.font = 'bold 18px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#0052CC';
+  ctx.font = 'bold 20px "JetBrains Mono", monospace';
   ctx.fillText(
     'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA A ROZPIS ISTIČOV • STN EN 61439-3 / STN EN 60617',
     margin + 22,
-    curY + 32
+    curY + 34
   );
 
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 30px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(fitText(ctx, project.name, contentW - 480), margin + 22, curY + 70);
+  ctx.fillStyle = '#000000';
+  ctx.font = 'bold 34px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(fitText(ctx, project.name, contentW - 500), margin + 22, curY + 76);
 
   const upstreamSummary = upstream.enabled
     ? `Pred elektromerom (${upstream.designation}): ${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent} A (${upstream.placement})`
@@ -332,207 +1035,241 @@ export async function renderCleanSchemaPagesToCanvases(
     ? `V rozvádzači (${internalDev.designation}): ${internalDev.deviceType} (${internalDev.poles} ${internalDev.hasOvercurrentProtection && internalDev.characteristic ? internalDev.characteristic : ''}${internalDev.ratedCurrent} A)`
     : 'V rozvádzači: Bez hl. prvku';
 
-  ctx.fillStyle = '#334155';
-  ctx.font = '600 17px "JetBrains Mono", monospace';
+  ctx.fillStyle = '#0F172A';
+  ctx.font = 'bold 19px "JetBrains Mono", monospace';
   ctx.fillText(
-    `${upstreamSummary}   |   ${internalSummary}   |   Sústava: ${project.supplySystem.toUpperCase()} (${project.voltage}, ${project.networkSystem})   |   Prívod: ${project.supplyCable}`,
+    fitText(
+      ctx,
+      `${upstreamSummary}   |   ${internalSummary}   |   Sústava: ${project.supplySystem.toUpperCase()} (${project.voltage}, ${project.networkSystem})   |   Prívod: ${project.supplyCable}`,
+      contentW - 490
+    ),
     margin + 22,
-    curY + 100
+    curY + 110
   );
 
   // Right-side metadata box inside top header
-  const metaBoxX = margin + contentW - 410;
+  const metaBoxX = margin + contentW - 440;
   ctx.beginPath();
   ctx.moveTo(metaBoxX, curY);
   ctx.lineTo(metaBoxX, curY + headerH);
   ctx.stroke();
 
-  ctx.fillStyle = '#475569';
-  ctx.font = '600 16px "JetBrains Mono", monospace';
-  ctx.fillText(`Číslo projektu: ${project.projectNumber}`, metaBoxX + 20, curY + 38);
-  ctx.fillText(`Dátum: ${project.projectDate}`, metaBoxX + 20, curY + 66);
+  ctx.fillStyle = '#0F172A';
+  ctx.font = 'bold 18px "JetBrains Mono", monospace';
+  ctx.fillText(`Číslo projektu: ${project.projectNumber}`, metaBoxX + 20, curY + 40);
+  ctx.fillText(`Dátum: ${project.projectDate}`, metaBoxX + 20, curY + 72);
   ctx.fillText(
-    `Kapacita skrine: ${din.totalUsedModules} / ${din.totalCapacityModules} M (${project.ipRating})`,
+    `Kapacita: ${din.totalUsedModules} / ${din.totalCapacityModules} M (${project.ipRating})`,
     metaBoxX + 20,
-    curY + 94
+    curY + 104
   );
 
-  curY += headerH + 22;
+  curY += headerH + 24;
 
-  // 2. PURE ELECTRICAL SCHEMATIC (NO TOOLBARS, NO BUTTONS, WHITE BACKGROUND)
+  // 2. PURE ELECTRICAL SCHEMATIC
   if (svgRendered) {
     ctx.save();
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(margin, curY, schemaDrawW, schemaDrawH);
     ctx.drawImage(svgRendered.img, margin, curY, schemaDrawW, schemaDrawH);
-    ctx.strokeStyle = '#0F172A';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
     ctx.strokeRect(margin, curY, schemaDrawW, schemaDrawH);
     ctx.restore();
   } else {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(margin, curY, schemaDrawW, schemaDrawH);
-    ctx.fillStyle = '#0F172A';
-    ctx.font = 'bold 24px "Plus Jakarta Sans", sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 26px "Plus Jakarta Sans", sans-serif';
     ctx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 40, curY + 60);
   }
 
   curY += schemaDrawH + 28;
 
-  // 3. BREAKER-TO-CIRCUIT SCHEDULE TABLE (KTORÝ OKRUH JE NA KTOROM ISTIČI)
-  ctx.fillStyle = '#0F172A';
-  ctx.fillRect(margin, curY, contentW, sectionTitleH);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 19px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(
-    'POPIS K SCHÉME — ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV (KTORÝ OKRUH JE NA KTOROM ISTIČI)',
-    margin + 18,
-    curY + 29
-  );
-  curY += sectionTitleH;
+  const drawLandscapeBreakerTable = (
+    targetCtx: CanvasRenderingContext2D,
+    startY: number,
+    rowsSubset: BreakerScheduleRow[]
+  ) => {
+    let ty = startY;
+    targetCtx.fillStyle = '#0F172A';
+    targetCtx.fillRect(margin, ty, contentW, sectionTitleH);
+    targetCtx.fillStyle = '#FFFFFF';
+    targetCtx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
+    targetCtx.fillText(
+      'POPIS K SCHÉME — ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV (KTORÝ OKRUH JE NA KTOROM ISTIČI)',
+      margin + 18,
+      ty + 33
+    );
+    ty += sectionTitleH;
 
-  const cols = [
-    { title: 'Istič', width: 105 },
-    { title: 'Ktorý okruh / spotrebič je na ističi', width: 515 },
-    { title: 'Typ a hodnota ističa', width: 340 },
-    { title: 'Prúdový chránič (RCD)', width: 335 },
-    { title: 'Fáza', width: 125 },
-    { title: 'Kábel a dĺžka', width: 325 },
-    { title: 'Príkon P', width: 135 },
-    { title: 'Prúd Ib / Iz', width: 190 },
-    { title: 'ΔU / Slučka Zs', width: contentW - 2070 },
-  ];
-
-  // Table Header Row
-  ctx.fillStyle = '#E2E8F0';
-  ctx.fillRect(margin, curY, contentW, tableHeaderH);
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(margin, curY, contentW, tableHeaderH);
-
-  let colX = margin;
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
-  cols.forEach((col, i) => {
-    ctx.fillText(col.title, colX + 12, curY + 27);
-    colX += col.width;
-    if (i < cols.length - 1) {
-      ctx.beginPath();
-      ctx.moveTo(colX, curY);
-      ctx.lineTo(colX, curY + tableHeaderH);
-      ctx.stroke();
-    }
-  });
-  curY += tableHeaderH;
-
-  // Table Data Rows
-  breakerRows.forEach((row, rIdx) => {
-    ctx.fillStyle = rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-    ctx.fillRect(margin, curY, contentW, tableRowH);
-    ctx.strokeStyle = '#CBD5E1';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(margin, curY, contentW, tableRowH);
-
-    let cellX = margin;
-    const cells = [
-      { text: row.label, bold: true, color: '#0066FF', mono: true },
-      { text: row.name, bold: true, color: '#0F172A', mono: false },
-      { text: row.breakerSpec, bold: true, color: '#0F172A', mono: true },
-      { text: row.rcdSpec, bold: false, color: '#334155', mono: true },
-      { text: row.phase, bold: true, color: '#0F172A', mono: true },
-      { text: row.cableSpec, bold: false, color: '#0F172A', mono: true },
-      { text: row.powerText, bold: true, color: '#0F172A', mono: true },
-      { text: row.currentText, bold: false, color: '#334155', mono: true },
-      { text: row.dropAndZsText, bold: true, color: '#0F172A', mono: true },
+    const cols = [
+      { title: 'Istič', width: 105 },
+      { title: 'Ktorý okruh / spotrebič je na ističi', width: 515 },
+      { title: 'Typ a hodnota ističa', width: 340 },
+      { title: 'Prúdový chránič (RCD)', width: 335 },
+      { title: 'Fáza', width: 125 },
+      { title: 'Kábel a dĺžka', width: 325 },
+      { title: 'Príkon P', width: 135 },
+      { title: 'Prúd Ib / Iz', width: 190 },
+      { title: 'ΔU / Slučka Zs', width: contentW - 2070 },
     ];
 
-    cells.forEach((cell, cIdx) => {
-      const w = cols[cIdx].width;
-      ctx.fillStyle = cell.color;
-      ctx.font = `${cell.bold ? 'bold' : '500'} 15px ${
-        cell.mono ? '"JetBrains Mono", monospace' : '"Plus Jakarta Sans", sans-serif'
-      }`;
-      ctx.fillText(fitText(ctx, cell.text, w - 20), cellX + 12, curY + 24);
-      cellX += w;
-      if (cIdx < cells.length - 1) {
-        ctx.beginPath();
-        ctx.moveTo(cellX, curY);
-        ctx.lineTo(cellX, curY + tableRowH);
-        ctx.stroke();
+    targetCtx.fillStyle = '#E2E8F0';
+    targetCtx.fillRect(margin, ty, contentW, tableHeaderH);
+    targetCtx.strokeStyle = '#000000';
+    targetCtx.lineWidth = 2;
+    targetCtx.strokeRect(margin, ty, contentW, tableHeaderH);
+
+    let colX = margin;
+    targetCtx.fillStyle = '#000000';
+    targetCtx.font = 'bold 19px "Plus Jakarta Sans", sans-serif';
+    cols.forEach((col, i) => {
+      targetCtx.fillText(col.title, colX + 12, ty + 31);
+      colX += col.width;
+      if (i < cols.length - 1) {
+        targetCtx.beginPath();
+        targetCtx.moveTo(colX, ty);
+        targetCtx.lineTo(colX, ty + tableHeaderH);
+        targetCtx.stroke();
       }
     });
+    ty += tableHeaderH;
 
-    curY += tableRowH;
-  });
+    rowsSubset.forEach((row, rIdx) => {
+      targetCtx.fillStyle = rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
+      targetCtx.fillRect(margin, ty, contentW, tableRowH);
+      targetCtx.strokeStyle = '#94A3B8';
+      targetCtx.lineWidth = 1.2;
+      targetCtx.strokeRect(margin, ty, contentW, tableRowH);
 
-  // Outer border around the breaker table
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(
-    margin,
-    curY - breakerRows.length * tableRowH - tableHeaderH - sectionTitleH,
-    contentW,
-    sectionTitleH + tableHeaderH + breakerRows.length * tableRowH
-  );
+      let cellX = margin;
+      const cells = [
+        { text: row.label, bold: true, color: '#0052CC', mono: true },
+        { text: row.name, bold: true, color: '#000000', mono: false },
+        { text: row.breakerSpec, bold: true, color: '#000000', mono: true },
+        { text: row.rcdSpec, bold: true, color: '#0F172A', mono: true },
+        { text: row.phase, bold: true, color: '#000000', mono: true },
+        { text: row.cableSpec, bold: true, color: '#000000', mono: true },
+        { text: row.powerText, bold: true, color: '#000000', mono: true },
+        { text: row.currentText, bold: true, color: '#0F172A', mono: true },
+        { text: row.dropAndZsText, bold: true, color: '#000000', mono: true },
+      ];
 
-  // 4. BOTTOM STN ISO 7200 TITLE BLOCK STAMP
-  const stampY = page1H - margin - footerStampH;
-  ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(margin, stampY, contentW, footerStampH);
-  ctx.strokeStyle = '#0F172A';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(margin, stampY, contentW, footerStampH);
+      cells.forEach((cell, cIdx) => {
+        const w = cols[cIdx].width;
+        targetCtx.fillStyle = cell.color;
+        targetCtx.font = `${cell.bold ? 'bold' : '600'} 18px ${
+          cell.mono ? '"JetBrains Mono", monospace' : '"Plus Jakarta Sans", sans-serif'
+        }`;
+        targetCtx.fillText(fitText(targetCtx, cell.text, w - 20), cellX + 12, ty + 30);
+        cellX += w;
+        if (cIdx < cells.length - 1) {
+          targetCtx.beginPath();
+          targetCtx.moveTo(cellX, ty);
+          targetCtx.lineTo(cellX, ty + tableRowH);
+          targetCtx.stroke();
+        }
+      });
 
-  const stampCols = [620, 760, 440];
-  let sX = margin;
-  stampCols.forEach((w) => {
-    sX += w;
-    ctx.beginPath();
-    ctx.moveTo(sX, stampY);
-    ctx.lineTo(sX, stampY + footerStampH);
-    ctx.stroke();
-  });
+      ty += tableRowH;
+    });
 
-  ctx.fillStyle = '#64748B';
-  ctx.font = 'bold 13px "JetBrains Mono", monospace';
-  ctx.fillText('ZODPOVEDNÝ PROJEKTANT:', margin + 18, stampY + 26);
-  ctx.fillText('NÁZOV VÝKRESU / ROZVÁDZAČA:', margin + 620 + 18, stampY + 26);
-  ctx.fillText('ČÍSLO VÝKRESU / FORMÁT:', margin + 1380 + 18, stampY + 26);
-  ctx.fillText('ODBORNÉ OVERENIE (STN 33 2000-6):', margin + 1820 + 18, stampY + 26);
+    targetCtx.strokeStyle = '#000000';
+    targetCtx.lineWidth = 2.5;
+    targetCtx.strokeRect(
+      margin,
+      startY,
+      contentW,
+      sectionTitleH + tableHeaderH + rowsSubset.length * tableRowH
+    );
+  };
 
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 18px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(fitText(ctx, project.designerName, 580), margin + 18, stampY + 54);
-  ctx.fillText(fitText(ctx, project.name, 720), margin + 620 + 18, stampY + 54);
-  ctx.font = 'bold 18px "JetBrains Mono", monospace';
-  ctx.fillText(
-    `${project.projectNumber} • ${options.paperFormat || 'A3'}`,
-    margin + 1380 + 18,
-    stampY + 54
-  );
+  const drawLandscapeStamp = (targetCtx: CanvasRenderingContext2D, totalH: number) => {
+    const stampY = totalH - margin - footerStampH;
+    targetCtx.fillStyle = '#F8FAFC';
+    targetCtx.fillRect(margin, stampY, contentW, footerStampH);
+    targetCtx.strokeStyle = '#000000';
+    targetCtx.lineWidth = 2.5;
+    targetCtx.strokeRect(margin, stampY, contentW, footerStampH);
 
-  ctx.fillStyle = '#475569';
-  ctx.font = '500 14px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(
-    `Miesto stavby: ${project.locationCity || 'Bratislava'}`,
-    margin + 18,
-    stampY + 78
-  );
-  ctx.fillText(
-    `Sústava: ${project.supplySystem.toUpperCase()} / ${project.voltage} / ${project.networkSystem}`,
-    margin + 620 + 18,
-    stampY + 78
-  );
-  ctx.fillText(`Dátum: ${project.projectDate}`, margin + 1380 + 18, stampY + 78);
-  ctx.fillText('Pečiatka a podpis revízneho technika', margin + 1820 + 18, stampY + 62);
+    const stampCols = [620, 760, 440];
+    let sX = margin;
+    stampCols.forEach((w) => {
+      sX += w;
+      targetCtx.beginPath();
+      targetCtx.moveTo(sX, stampY);
+      targetCtx.lineTo(sX, stampY + footerStampH);
+      targetCtx.stroke();
+    });
+
+    targetCtx.fillStyle = '#334155';
+    targetCtx.font = 'bold 15px "JetBrains Mono", monospace';
+    targetCtx.fillText('ZODPOVEDNÝ PROJEKTANT:', margin + 18, stampY + 28);
+    targetCtx.fillText('NÁZOV VÝKRESU / ROZVÁDZAČA:', margin + 620 + 18, stampY + 28);
+    targetCtx.fillText('ČÍSLO VÝKRESU / FORMÁT:', margin + 1380 + 18, stampY + 28);
+    targetCtx.fillText('ODBORNÉ OVERENIE (STN 33 2000-6):', margin + 1820 + 18, stampY + 28);
+
+    targetCtx.fillStyle = '#000000';
+    targetCtx.font = 'bold 21px "Plus Jakarta Sans", sans-serif';
+    targetCtx.fillText(fitText(targetCtx, project.designerName, 580), margin + 18, stampY + 60);
+    targetCtx.fillText(fitText(targetCtx, project.name, 720), margin + 620 + 18, stampY + 60);
+    targetCtx.font = 'bold 20px "JetBrains Mono", monospace';
+    targetCtx.fillText(
+      `${project.projectNumber} • ${paperFormat} NA ŠÍRKU`,
+      margin + 1380 + 18,
+      stampY + 60
+    );
+
+    targetCtx.fillStyle = '#1E293B';
+    targetCtx.font = '600 16px "Plus Jakarta Sans", sans-serif';
+    targetCtx.fillText(
+      `Miesto stavby: ${project.locationCity || 'Bratislava'}`,
+      margin + 18,
+      stampY + 88
+    );
+    targetCtx.fillText(
+      `Sústava: ${project.supplySystem.toUpperCase()} / ${project.voltage} / ${project.networkSystem}`,
+      margin + 620 + 18,
+      stampY + 88
+    );
+    targetCtx.fillText(`Dátum: ${project.projectDate}`, margin + 1380 + 18, stampY + 88);
+    targetCtx.fillText('Pečiatka a podpis revízneho technika', margin + 1820 + 18, stampY + 68);
+  };
 
   const canvases: HTMLCanvasElement[] = [canvas1];
 
-  // Optional Page 2: Bill of Materials (Kusovník) if requested
+  if (!splitScheduleToSeparatePage) {
+    drawLandscapeBreakerTable(ctx, curY, breakerRows);
+    drawLandscapeStamp(ctx, page1H);
+  } else {
+    drawLandscapeStamp(ctx, page1H);
+
+    // Separate Landscape Page for Breaker-to-Circuit Schedule
+    const schedH = Math.max(
+      1697,
+      margin * 2 + sectionTitleH + tableHeaderH + breakerRows.length * tableRowH + footerStampH + 80
+    );
+    const schedCanvas = document.createElement('canvas');
+    schedCanvas.width = pageW;
+    schedCanvas.height = schedH;
+    const sCtx = schedCanvas.getContext('2d')!;
+    sCtx.fillStyle = '#FFFFFF';
+    sCtx.fillRect(0, 0, pageW, schedH);
+    sCtx.strokeStyle = '#000000';
+    sCtx.lineWidth = 3.5;
+    sCtx.strokeRect(margin - 16, margin - 16, contentW + 32, schedH - (margin - 16) * 2);
+
+    drawLandscapeBreakerTable(sCtx, margin, breakerRows);
+    drawLandscapeStamp(sCtx, schedH);
+    canvases.push(schedCanvas);
+  }
+
+  // Optional Page: Bill of Materials (Kusovník) if requested
   if (options.includeBom) {
     const bom = generateBom(project);
-    const bomRowH = 38;
-    const page2H = Math.max(1200, margin * 2 + 120 + (bom.length + 2) * bomRowH + 80);
+    const bomRowH = 44;
+    const page2H = Math.max(1697, margin * 2 + 130 + (bom.length + 2) * bomRowH + 120);
     const canvas2 = document.createElement('canvas');
     canvas2.width = pageW;
     canvas2.height = page2H;
@@ -540,21 +1277,21 @@ export async function renderCleanSchemaPagesToCanvases(
 
     ctx2.fillStyle = '#FFFFFF';
     ctx2.fillRect(0, 0, pageW, page2H);
-    ctx2.strokeStyle = '#0F172A';
-    ctx2.lineWidth = 3;
+    ctx2.strokeStyle = '#000000';
+    ctx2.lineWidth = 3.5;
     ctx2.strokeRect(margin - 16, margin - 16, contentW + 32, page2H - (margin - 16) * 2);
 
     let y2 = margin;
     ctx2.fillStyle = '#0F172A';
-    ctx2.fillRect(margin, y2, contentW, 54);
+    ctx2.fillRect(margin, y2, contentW, 56);
     ctx2.fillStyle = '#FFFFFF';
-    ctx2.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
+    ctx2.font = 'bold 23px "Plus Jakarta Sans", sans-serif';
     ctx2.fillText(
       `PRÍLOHA — VÝKAZ MATERIÁLU (KUSOVNÍK PRÍSTROJOV BOM) • ${project.name}`,
       margin + 20,
-      y2 + 35
+      y2 + 37
     );
-    y2 += 54;
+    y2 += 56;
 
     const bomCols = [
       { title: 'Kód', width: 120 },
@@ -568,31 +1305,31 @@ export async function renderCleanSchemaPagesToCanvases(
     ];
 
     ctx2.fillStyle = '#E2E8F0';
-    ctx2.fillRect(margin, y2, contentW, 42);
-    ctx2.strokeStyle = '#0F172A';
-    ctx2.lineWidth = 1.5;
-    ctx2.strokeRect(margin, y2, contentW, 42);
+    ctx2.fillRect(margin, y2, contentW, 46);
+    ctx2.strokeStyle = '#000000';
+    ctx2.lineWidth = 2;
+    ctx2.strokeRect(margin, y2, contentW, 46);
 
     let bx = margin;
-    ctx2.fillStyle = '#0F172A';
-    ctx2.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
+    ctx2.fillStyle = '#000000';
+    ctx2.font = 'bold 18px "Plus Jakarta Sans", sans-serif';
     bomCols.forEach((col, idx) => {
-      ctx2.fillText(col.title, bx + 12, y2 + 27);
+      ctx2.fillText(col.title, bx + 12, y2 + 30);
       bx += col.width;
       if (idx < bomCols.length - 1) {
         ctx2.beginPath();
         ctx2.moveTo(bx, y2);
-        ctx2.lineTo(bx, y2 + 42);
+        ctx2.lineTo(bx, y2 + 46);
         ctx2.stroke();
       }
     });
-    y2 += 42;
+    y2 += 46;
 
     bom.forEach((b, rIdx) => {
       ctx2.fillStyle = rIdx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       ctx2.fillRect(margin, y2, contentW, bomRowH);
-      ctx2.strokeStyle = '#CBD5E1';
-      ctx2.lineWidth = 1;
+      ctx2.strokeStyle = '#94A3B8';
+      ctx2.lineWidth = 1.2;
       ctx2.strokeRect(margin, y2, contentW, bomRowH);
 
       const vals = [
@@ -608,14 +1345,15 @@ export async function renderCleanSchemaPagesToCanvases(
       let cx = margin;
       vals.forEach((v, cIdx) => {
         const w = bomCols[cIdx].width;
-        ctx2.fillStyle = cIdx === 0 ? '#0066FF' : '#0F172A';
-        ctx2.font = `${cIdx < 2 || cIdx === 7 ? 'bold' : '500'} 15px "JetBrains Mono", monospace`;
-        ctx2.fillText(fitText(ctx2, v, w - 20), cx + 12, y2 + 25);
+        ctx2.fillStyle = cIdx === 0 ? '#0052CC' : '#000000';
+        ctx2.font = `bold 17px "JetBrains Mono", monospace`;
+        ctx2.fillText(fitText(ctx2, v, w - 20), cx + 12, y2 + 29);
         cx += w;
       });
       y2 += bomRowH;
     });
 
+    drawLandscapeStamp(ctx2, page2H);
     canvases.push(canvas2);
   }
 
@@ -630,10 +1368,30 @@ export async function exportCleanSchemaToPdf(
   project: SwitchboardProject,
   options: PdfExportOptions = {}
 ): Promise<void> {
-  const canvases = await renderCleanSchemaPagesToCanvases(project, options);
+  const orientation: SchemaOrientation =
+    options.orientation ??
+    (options.paperFormat === 'A3' || options.paperFormat === 'LARGE' ? 'landscape' : 'portrait');
+  const paperFormat = options.paperFormat ?? (orientation === 'portrait' ? 'A4' : 'A3');
 
+  const canvases = await renderCleanSchemaPagesToCanvases(project, {
+    ...options,
+    orientation,
+    paperFormat,
+  });
+
+  const isPortrait = orientation === 'portrait';
   const ptBaseWidth =
-    options.paperFormat === 'A4' ? 841.89 : options.paperFormat === 'LARGE' ? 1683.78 : 1190.55;
+    paperFormat === 'LARGE'
+      ? isPortrait
+        ? 1190.55
+        : 1683.78
+      : paperFormat === 'A3'
+      ? isPortrait
+        ? 841.89
+        : 1190.55
+      : isPortrait
+      ? 595.28
+      : 841.89;
 
   const pdfPages = canvases.map((canvas) => {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.94);
@@ -667,7 +1425,16 @@ export async function exportCleanSchemaToPng(
   project: SwitchboardProject,
   options: PdfExportOptions = {}
 ): Promise<void> {
-  const canvases = await renderCleanSchemaPagesToCanvases(project, options);
+  const orientation: SchemaOrientation =
+    options.orientation ??
+    (options.paperFormat === 'A3' || options.paperFormat === 'LARGE' ? 'landscape' : 'portrait');
+  const paperFormat = options.paperFormat ?? (orientation === 'portrait' ? 'A4' : 'A3');
+
+  const canvases = await renderCleanSchemaPagesToCanvases(project, {
+    ...options,
+    orientation,
+    paperFormat,
+  });
   const firstCanvas = canvases[0];
   if (!firstCanvas) return;
 

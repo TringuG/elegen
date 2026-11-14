@@ -50,8 +50,8 @@
 
 @media print {
   @page {
-    size: A3 landscape;
-    margin: 8mm;
+    size: A4 portrait;
+    margin: 7mm;
   }
   html, body {
     background-color: #ffffff !important;
@@ -93,5 +93,6 @@
     height: auto !important;
     max-width: 100% !important;
     box-shadow: none !important;
+    border: none !important;
   }
 }

@@ -274,6 +274,7 @@ export interface SwitchboardProject {
 }
 
 export type SchemaDisplayMode = 'single-line' | 'multi-line' | 'wiring-diagram';
+export type SchemaOrientation = 'portrait' | 'landscape';
 export type SchemaColorMode = 'stn-color' | 'cad-mono';
 
 export interface PhaseLoadSummary {

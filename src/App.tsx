@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   NavigationSection,
   SchemaDisplayMode,
+  SchemaOrientation,
   SwitchboardProject,
 } from './types/electrical';
 import {
@@ -182,6 +183,7 @@ export function App() {
 
   const [activeSection, setActiveSection] = useState<NavigationSection>('dashboard');
   const [displayMode, setDisplayMode] = useState<SchemaDisplayMode>('single-line');
+  const [schemaOrientation, setSchemaOrientation] = useState<SchemaOrientation>('portrait');
   const [showAdvancedNav, setShowAdvancedNav] = useState<boolean>(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
   const [confirmResetModal, setConfirmResetModal] = useState<boolean>(false);
@@ -900,7 +902,13 @@ export function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => exportCleanSchemaToPdf(activeProject, { displayMode, paperFormat: 'A3' })}
+                    onClick={() =>
+                      exportCleanSchemaToPdf(activeProject, {
+                        displayMode,
+                        orientation: schemaOrientation,
+                        paperFormat: schemaOrientation === 'portrait' ? 'A4' : 'A3',
+                      })
+                    }
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                     title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
                   >
@@ -922,6 +930,8 @@ export function App() {
                   project={activeProject}
                   displayMode={displayMode}
                   onDisplayModeChange={setDisplayMode}
+                  orientation={schemaOrientation}
+                  onOrientationChange={setSchemaOrientation}
                   onProjectChange={handleProjectChange}
                 />
               </div>

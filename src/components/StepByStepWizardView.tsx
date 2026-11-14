@@ -21,6 +21,7 @@ import {
   RcdSensitivity,
   RcdType,
   SchemaDisplayMode,
+  SchemaOrientation,
   SwitchboardProject,
   UpstreamBreakerPlacement,
 } from '../types/electrical';
@@ -121,6 +122,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
   isProMode = false,
 }) => {
   const [activeStep, setActiveStep] = useState<number>(1);
+  const [schemaOrientation, setSchemaOrientation] = useState<SchemaOrientation>('portrait');
   const [showBasicAdvanced, setShowBasicAdvanced] = useState(false);
 
   // Step 2 edit states
@@ -2746,7 +2748,13 @@ export const StepByStepWizardView: React.FC<Props> = ({
               </button>
               <button
                 type="button"
-                onClick={() => exportCleanSchemaToPdf(project, { displayMode, paperFormat: 'A3' })}
+                onClick={() =>
+                  exportCleanSchemaToPdf(project, {
+                    displayMode,
+                    orientation: schemaOrientation,
+                    paperFormat: schemaOrientation === 'portrait' ? 'A4' : 'A3',
+                  })
+                }
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
                 title="Priamo stiahnuť čistý PDF súbor (elektrická schéma + tabuľka ktorý okruh je na ktorom ističi)"
               >
@@ -2823,6 +2831,8 @@ export const StepByStepWizardView: React.FC<Props> = ({
               project={project}
               displayMode={displayMode}
               onDisplayModeChange={onDisplayModeChange}
+              orientation={schemaOrientation}
+              onOrientationChange={setSchemaOrientation}
               onProjectChange={onProjectChange}
             />
           </div>
