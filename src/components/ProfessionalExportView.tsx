@@ -570,45 +570,47 @@ export const ProfessionalExportView: React.FC<Props> = ({
       {/* PRINTABLE / EXPORTABLE ENGINEERING DOSSIER SHEET (CRISP WHITE PAPER)  */}
       {/* ===================================================================== */}
       <div className="bg-white text-slate-900 rounded-2xl border border-slate-300 shadow-sm p-6 sm:p-8 space-y-6 print:border-0 print:shadow-none print:p-0">
-        {/* Document Header Banner */}
-        <div className="border-2 border-slate-900 p-4 flex flex-wrap items-center justify-between gap-4 bg-slate-50">
-          <div>
-            <div className="text-[11px] font-mono uppercase tracking-widest text-[#0066FF] font-bold">
-              ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617
+        {/* Document Header Banner (only shown when Technical Report is included, to avoid duplicating the schematic header) */}
+        {includedSections.technicalDescription && (
+          <div className="border-2 border-slate-900 p-4 flex flex-wrap items-center justify-between gap-4 bg-slate-50">
+            <div>
+              <div className="text-[11px] font-mono uppercase tracking-widest text-[#0066FF] font-bold">
+                TECHNICKÁ SPRIEVODNÁ SPRÁVA • STN EN 61439-3 / STN EN 60617
+              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-0.5">
+                {project.name}
+              </h1>
+              <p className="text-xs text-slate-600 mt-1">
+                Objekt: <strong>{project.objectType}</strong> | Sústava:{' '}
+                <strong>
+                  {project.supplySystem.toUpperCase()} ({project.voltage}, {project.networkSystem})
+                </strong>{' '}
+                | Prívod: <strong>{project.supplyCable}</strong> | Krytie:{' '}
+                <strong>{project.ipRating}</strong>
+              </p>
+              <p className="text-xs text-slate-700 mt-1 font-mono">
+                Pred elektromerom:{' '}
+                <strong>
+                  {upstream.enabled
+                    ? `${upstream.designation} (${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent}A, ${upstream.placement})`
+                    : 'Bez QF0'}
+                </strong>{' '}
+                | Meranie: <strong>{meter.enabled ? meter.type : 'Bez elektromera'}</strong> | V rozvádzači:{' '}
+                <strong>
+                  {internalDev.enabled
+                    ? `${internalDev.designation} – ${internalDev.deviceType} (${internalDev.poles} ${internalDev.ratedCurrent}A)`
+                    : 'Bez hlavného prvku'}
+                </strong>
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-0.5">
-              {project.name}
-            </h1>
-            <p className="text-xs text-slate-600 mt-1">
-              Objekt: <strong>{project.objectType}</strong> | Sústava:{' '}
-              <strong>
-                {project.supplySystem.toUpperCase()} ({project.voltage}, {project.networkSystem})
-              </strong>{' '}
-              | Prívod: <strong>{project.supplyCable}</strong> | Krytie:{' '}
-              <strong>{project.ipRating}</strong>
-            </p>
-            <p className="text-xs text-slate-700 mt-1 font-mono">
-              Pred elektromerom:{' '}
-              <strong>
-                {upstream.enabled
-                  ? `${upstream.designation} (${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent}A, ${upstream.placement})`
-                  : 'Bez QF0'}
-              </strong>{' '}
-              | Meranie: <strong>{meter.enabled ? meter.type : 'Bez elektromera'}</strong> | V rozvádzači:{' '}
-              <strong>
-                {internalDev.enabled
-                  ? `${internalDev.designation} – ${internalDev.deviceType} (${internalDev.poles} ${internalDev.ratedCurrent}A)`
-                  : 'Bez hlavného prvku'}
-              </strong>
-            </p>
+            <div className="text-right font-mono text-xs border-l border-slate-300 pl-4">
+              <div className="text-slate-500">Číslo projektu:</div>
+              <div className="font-bold text-slate-900 text-sm">{project.projectNumber}</div>
+              <div className="text-slate-500 mt-1">Dátum vyhotovenia:</div>
+              <div className="font-bold text-slate-900">{project.projectDate}</div>
+            </div>
           </div>
-          <div className="text-right font-mono text-xs border-l border-slate-300 pl-4">
-            <div className="text-slate-500">Číslo projektu:</div>
-            <div className="font-bold text-slate-900 text-sm">{project.projectNumber}</div>
-            <div className="text-slate-500 mt-1">Dátum vyhotovenia:</div>
-            <div className="font-bold text-slate-900">{project.projectDate}</div>
-          </div>
-        </div>
+        )}
 
         {/* 1. Technical Description (Technická sprievodná správa) */}
         {includedSections.technicalDescription && (
@@ -653,9 +655,9 @@ export const ProfessionalExportView: React.FC<Props> = ({
 
         {/* 2. Single-Line Schematic */}
         {includedSections.singleLineSchema && (
-          <section className="space-y-2.5 break-inside-avoid">
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
-              Jednopólová schéma rozvádzača
+          <section className="space-y-2.5 break-inside-avoid print:break-after-page">
+            <h3 className="print:hidden text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+              Jednopólová schéma rozvádzača (Celá schéma na 1 liste)
             </h3>
             <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">
               <ElectricalSchemaCanvas
@@ -672,8 +674,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
 
         {/* 3. Multi-Line Schematic */}
         {includedSections.multiLineSchema && (
-          <section className="space-y-2.5 break-inside-avoid">
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+          <section className="space-y-2.5 break-inside-avoid print:break-after-page">
+            <h3 className="print:hidden text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
               Viacpólová schéma rozvádzača (L1, L2, L3, N, PE)
             </h3>
             <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">
@@ -691,8 +693,8 @@ export const ProfessionalExportView: React.FC<Props> = ({
 
         {/* 4. Wiring Diagram */}
         {includedSections.wiringDiagram && (
-          <section className="space-y-2.5 break-inside-avoid">
-            <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
+          <section className="space-y-2.5 break-inside-avoid print:break-after-page">
+            <h3 className="print:hidden text-sm font-extrabold uppercase tracking-wider text-slate-900 border-b-2 border-slate-900 pb-1">
               Schéma vnútorného zapojenia a prípojníc PE / N
             </h3>
             <div className="w-full border border-slate-300 print:border-0 rounded-xl overflow-hidden print:overflow-visible">

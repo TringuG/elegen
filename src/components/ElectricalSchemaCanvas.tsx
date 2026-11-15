@@ -206,21 +206,34 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
     height: number;
   }
 
-  const totalPortraitCircuitCount =
-    rcdGroups.reduce((acc, g) => acc + Math.max(1, g.circuits.length), 0) +
-    directCircuits.length;
+  const portraitSpineStartY = mainBreaker.hasSurgeProtector ? 328 : 288;
+  const maxSpineBottomY = 1308;
+  const availSpineH = maxSpineBottomY - portraitSpineStartY;
 
-  const portraitCircuitRowH = totalPortraitCircuitCount <= 6 ? 84 : 74;
-  const portraitGroupHeaderH = 26;
-  const portraitGroupGap = totalPortraitCircuitCount <= 6 ? 18 : 11;
-  const portraitSpineStartY = 336;
+  const numGroupHeaders =
+    rcdGroups.filter((g) => g.circuits.length > 0).length +
+    (directCircuits.length > 0 ? 1 : 0);
+  const numStandalones = rcdGroups.filter((g) => g.circuits.length === 0).length;
+  const totalPortraitCircuitCount = Math.max(1, circuits.length + numStandalones);
+  const totalGroupsCount = rcdGroups.length + (directCircuits.length > 0 ? 1 : 0);
+
+  const portraitGroupHeaderH = totalPortraitCircuitCount > 9 ? 22 : 25;
+  const portraitGroupGap =
+    totalPortraitCircuitCount > 11 ? 7 : totalPortraitCircuitCount > 6 ? 11 : 16;
+
+  const fixedOverheadH =
+    numGroupHeaders * portraitGroupHeaderH +
+    Math.max(0, totalGroupsCount - 1) * portraitGroupGap;
+
+  const idealRowH = Math.floor((availSpineH - fixedOverheadH) / totalPortraitCircuitCount);
+  const portraitCircuitRowH = Math.max(46, Math.min(82, idealRowH));
 
   const portraitSpineItems: PortraitSpineItem[] = [];
   let spineCursorY = portraitSpineStartY;
 
   rcdGroups.forEach((group) => {
     if (group.rcd.deviceKind === 'RCBO' && group.circuits.length === 0) {
-      const h = portraitCircuitRowH + 8;
+      const h = portraitCircuitRowH + 4;
       portraitSpineItems.push({
         kind: 'rcbo-standalone',
         rcd: group.rcd,
@@ -230,7 +243,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
       });
       spineCursorY += h + portraitGroupGap;
     } else if (group.circuits.length === 0) {
-      const h = 72;
+      const h = Math.min(68, portraitCircuitRowH);
       portraitSpineItems.push({
         kind: 'rcd-empty',
         rcd: group.rcd,
@@ -263,11 +276,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
     spineCursorY += h + portraitGroupGap;
   }
 
+  const unscaledSpineH = Math.max(1, spineCursorY - portraitSpineStartY);
+  const portraitSpineScale = unscaledSpineH > availSpineH ? availSpineH / unscaledSpineH : 1;
+
   const landscapeWidth = Math.max(1320, currentX + 140);
   const landscapeHeight = 1220;
 
   const portraitWidth = 1000;
-  const portraitHeight = Math.max(1414, spineCursorY + 114);
+  const portraitHeight = 1414;
 
   const canvasWidth = isPortrait ? portraitWidth : landscapeWidth;
   const canvasHeight = isPortrait ? portraitHeight : landscapeHeight;
@@ -1808,14 +1824,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           x1={mainBus1LX}
                           y1={280}
                           x2={mainBus1LX}
-                          y2={mainBusBottomY}
+                          y2={portraitSpineStartY}
                           stroke="#000000"
                           strokeWidth={3.8}
                         />
-                        <circle cx={mainBus1LX} cy={312} r={4.2} fill="#000000" />
+                        <circle cx={mainBus1LX} cy={296} r={4.2} fill="#000000" />
                         <text
                           x={24}
-                          y={316}
+                          y={300}
                           fill="#000000"
                           fontSize={12}
                           fontWeight="bold"
@@ -1830,7 +1846,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           x1={mainBusL1X}
                           y1={280}
                           x2={mainBusL1X}
-                          y2={mainBusBottomY}
+                          y2={portraitSpineStartY}
                           stroke="#000000"
                           strokeWidth={2.4}
                         />
@@ -1840,7 +1856,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                               x1={mainBusL2X}
                               y1={280}
                               x2={mainBusL2X}
-                              y2={mainBusBottomY}
+                              y2={portraitSpineStartY}
                               stroke="#000000"
                               strokeWidth={2.4}
                             />
@@ -1848,7 +1864,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                               x1={mainBusL3X}
                               y1={280}
                               x2={mainBusL3X}
-                              y2={mainBusBottomY}
+                              y2={portraitSpineStartY}
                               stroke="#000000"
                               strokeWidth={2.4}
                             />
@@ -1859,7 +1875,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             x1={mainBusNX}
                             y1={280}
                             x2={mainBusNX}
-                            y2={mainBusBottomY}
+                            y2={portraitSpineStartY}
                             stroke="#0369A1"
                             strokeWidth={2.4}
                           />
@@ -1868,16 +1884,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           x1={mainBusPEX}
                           y1={280}
                           x2={mainBusPEX}
-                          y2={mainBusBottomY}
+                          y2={portraitSpineStartY}
                           stroke="#15803D"
                           strokeWidth={2.4}
                           strokeDasharray="6 3"
                         />
                         <rect
                           x={44}
-                          y={287}
+                          y={275}
                           width={72}
-                          height={16}
+                          height={15}
                           rx={2}
                           fill="#FFFFFF"
                           stroke="#CBD5E1"
@@ -1885,7 +1901,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         />
                         <text
                           x={mainBusL1X}
-                          y={299}
+                          y={286}
                           textAnchor="middle"
                           fill="#000000"
                           fontSize={9.5}
@@ -1898,7 +1914,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           <>
                             <text
                               x={mainBusL2X}
-                              y={299}
+                              y={286}
                               textAnchor="middle"
                               fill="#000000"
                               fontSize={9.5}
@@ -1909,7 +1925,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={mainBusL3X}
-                              y={299}
+                              y={286}
                               textAnchor="middle"
                               fill="#000000"
                               fontSize={9.5}
@@ -1923,7 +1939,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         {project.networkSystem !== 'TN-C' && (
                           <text
                             x={mainBusNX}
-                            y={299}
+                            y={286}
                             textAnchor="middle"
                             fill="#0369A1"
                             fontSize={9.5}
@@ -1935,7 +1951,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         )}
                         <text
                           x={mainBusPEX}
-                          y={299}
+                          y={286}
                           textAnchor="middle"
                           fill="#15803D"
                           fontSize={9.5}
@@ -1950,6 +1966,73 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     {/* ================================================================= */}
                     {/* HORIZONTAL CIRCUIT BRANCHES STACKED ZHORA DOLE ACROSS A4 WIDTH    */}
                     {/* ================================================================= */}
+                    <g
+                      transform={
+                        portraitSpineScale < 1
+                          ? `translate(0, ${portraitSpineStartY}) scale(1, ${portraitSpineScale}) translate(0, -${portraitSpineStartY})`
+                          : undefined
+                      }
+                    >
+                      {displayMode === 'single-line' ? (
+                        <line
+                          x1={mainBus1LX}
+                          y1={portraitSpineStartY}
+                          x2={mainBus1LX}
+                          y2={mainBusBottomY}
+                          stroke="#000000"
+                          strokeWidth={3.8}
+                        />
+                      ) : (
+                        <>
+                          <line
+                            x1={mainBusL1X}
+                            y1={portraitSpineStartY}
+                            x2={mainBusL1X}
+                            y2={mainBusBottomY}
+                            stroke="#000000"
+                            strokeWidth={2.4}
+                          />
+                          {isThreePhase && (
+                            <>
+                              <line
+                                x1={mainBusL2X}
+                                y1={portraitSpineStartY}
+                                x2={mainBusL2X}
+                                y2={mainBusBottomY}
+                                stroke="#000000"
+                                strokeWidth={2.4}
+                              />
+                              <line
+                                x1={mainBusL3X}
+                                y1={portraitSpineStartY}
+                                x2={mainBusL3X}
+                                y2={mainBusBottomY}
+                                stroke="#000000"
+                                strokeWidth={2.4}
+                              />
+                            </>
+                          )}
+                          {project.networkSystem !== 'TN-C' && (
+                            <line
+                              x1={mainBusNX}
+                              y1={portraitSpineStartY}
+                              x2={mainBusNX}
+                              y2={mainBusBottomY}
+                              stroke="#0369A1"
+                              strokeWidth={2.4}
+                            />
+                          )}
+                          <line
+                            x1={mainBusPEX}
+                            y1={portraitSpineStartY}
+                            x2={mainBusPEX}
+                            y2={mainBusBottomY}
+                            stroke="#15803D"
+                            strokeWidth={2.4}
+                            strokeDasharray="6 3"
+                          />
+                        </>
+                      )}
                     {portraitSpineItems.map((item, itemIdx) => {
                       const renderHorizontalCircuitRow = (
                         c: CircuitConfig,
@@ -1964,6 +2047,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         const isThreePoleCircuit = c.poles === '3P' || c.poles === '4P';
                         const isCircuitSelected =
                           selectedElement?.type === 'circuit' && selectedElement.id === c.id;
+                        const isCompactRow = portraitCircuitRowH < 66;
+                        const mcbHalfH = isCompactRow ? 13 : 17;
+                        const mcbTopTextOff = isCompactRow ? 16 : 21;
+                        const mcbBotTextOff = isCompactRow ? 22 : 29;
+                        const cableHalfH = isCompactRow ? 14 : 18;
+                        const loadHalfH = isCompactRow ? 18 : 23;
                         const mcbLeftX = 298;
                         const mcbRightX = 366;
                         const mcbMidX = 332;
@@ -2062,12 +2151,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                               </>
                             )}
 
-                            {/* 2. Horizontal MCB Box (68 × 34 at x = 298..366) */}
+                            {/* 2. Horizontal MCB Box (68 × 2*mcbHalfH at x = 298..366) */}
                             <rect
                               x={mcbLeftX}
-                              y={cy - 17}
+                              y={cy - mcbHalfH}
                               width={68}
-                              height={34}
+                              height={mcbHalfH * 2}
                               rx={4}
                               fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
                               stroke={isCircuitSelected ? '#0066FF' : '#000000'}
@@ -2124,7 +2213,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                                   x1={mcbRightX - 16}
                                   y1={cy}
                                   x2={mcbLeftX + 19}
-                                  y2={cy - 9}
+                                  y2={cy - (isCompactRow ? 7 : 9)}
                                   stroke="#000000"
                                   strokeWidth={2.2}
                                 />
@@ -2150,10 +2239,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             {/* Upright Breaker Labels Above & Below MCB Box */}
                             <text
                               x={mcbMidX}
-                              y={cy - 21}
+                              y={cy - mcbTopTextOff}
                               textAnchor="middle"
                               fill="#000000"
-                              fontSize={12.5}
+                              fontSize={isCompactRow ? 11.2 : 12.5}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2162,17 +2251,17 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={mcbMidX}
-                              y={cy + 29}
+                              y={cy + mcbBotTextOff}
                               textAnchor="middle"
                               fill="#0F172A"
-                              fontSize={11}
+                              fontSize={isCompactRow ? 9.8 : 11}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
                               Fáza {c.phase === 'L1,L2,L3' ? '3F' : c.phase} • {c.breakingCapacity}
                             </text>
 
-                            {/* 3. Horizontal Cable Section (x = 366..584) */}
+                            {/* 3. Horizontal Cable Section (x = 366..558) */}
                             {displayMode === 'single-line' ? (
                               <g>
                                 <line
@@ -2196,7 +2285,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                                   y={cy - 9}
                                   textAnchor="middle"
                                   fill="#000000"
-                                  fontSize={11}
+                                  fontSize={10.5}
                                   fontWeight="bold"
                                   fontFamily="JetBrains Mono, monospace"
                                 >
@@ -2268,12 +2357,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                               </g>
                             )}
 
-                            {/* Horizontal Cable Tag Pill (x = 398..546, 148 × 36) */}
+                            {/* Horizontal Cable Tag Pill (x = 398..546) */}
                             <rect
                               x={398}
-                              y={cy - 19}
+                              y={cy - cableHalfH}
                               width={148}
-                              height={36}
+                              height={cableHalfH * 2}
                               rx={4}
                               fill="#FFFFFF"
                               stroke="#64748B"
@@ -2281,10 +2370,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             />
                             <text
                               x={472}
-                              y={cy - 4}
+                              y={cy - (isCompactRow ? 2.5 : 4)}
                               textAnchor="middle"
                               fill="#000000"
-                              fontSize={11.5}
+                              fontSize={isCompactRow ? 10.5 : 11.5}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2292,10 +2381,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={472}
-                              y={cy + 11}
+                              y={cy + (isCompactRow ? 9.5 : 11)}
                               textAnchor="middle"
                               fill="#0369A1"
-                              fontSize={10.5}
+                              fontSize={isCompactRow ? 9.5 : 10.5}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2303,12 +2392,12 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                               {c.phase === 'L1,L2,L3' ? '400 V' : '230 V'}
                             </text>
 
-                            {/* 4. Horizontal Circuit / Appliance Terminal Box (x = 558..964, 406 × 46) */}
+                            {/* 4. Horizontal Circuit / Appliance Terminal Box (x = 558..964) */}
                             <rect
                               x={cableEndX}
-                              y={cy - 23}
+                              y={cy - loadHalfH}
                               width={loadEndX - cableEndX}
-                              height={46}
+                              height={loadHalfH * 2}
                               rx={4}
                               fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
                               stroke={isCircuitSelected ? '#0066FF' : '#000000'}
@@ -2316,9 +2405,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             />
                             <rect
                               x={cableEndX}
-                              y={cy - 23}
+                              y={cy - loadHalfH}
                               width={54}
-                              height={46}
+                              height={loadHalfH * 2}
                               rx={4}
                               fill="#F1F5F9"
                               stroke="#000000"
@@ -2326,10 +2415,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             />
                             <text
                               x={cableEndX + 27}
-                              y={cy - 4}
+                              y={cy - (isCompactRow ? 2.5 : 4)}
                               textAnchor="middle"
                               fill="#000000"
-                              fontSize={13}
+                              fontSize={isCompactRow ? 12 : 13}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2337,10 +2426,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={cableEndX + 27}
-                              y={cy + 14}
+                              y={cy + (isCompactRow ? 11.5 : 14)}
                               textAnchor="middle"
                               fill="#0369A1"
-                              fontSize={11}
+                              fontSize={isCompactRow ? 10 : 11}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2349,9 +2438,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
                             <text
                               x={cableEndX + 64}
-                              y={cy - 4}
+                              y={cy - (isCompactRow ? 2.5 : 4)}
                               fill="#000000"
-                              fontSize={13.5}
+                              fontSize={isCompactRow ? 12.2 : 13.5}
                               fontWeight="bold"
                               fontFamily="Plus Jakarta Sans, sans-serif"
                             >
@@ -2359,9 +2448,9 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={cableEndX + 64}
-                              y={cy + 14}
+                              y={cy + (isCompactRow ? 11.5 : 14)}
                               fill="#1E293B"
-                              fontSize={11.5}
+                              fontSize={isCompactRow ? 10.5 : 11.5}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -2370,10 +2459,10 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             </text>
                             <text
                               x={loadEndX - 12}
-                              y={cy + 14}
+                              y={cy + (isCompactRow ? 11.5 : 14)}
                               textAnchor="end"
                               fill="#0369A1"
-                              fontSize={11.5}
+                              fontSize={isCompactRow ? 10.5 : 11.5}
                               fontWeight="bold"
                               fontFamily="JetBrains Mono, monospace"
                             >
@@ -3126,6 +3215,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         </g>
                       );
                     })}
+                    </g>
 
                     {/* Bottom Full-Width STN Title Block in Portrait Mode */}
                     <g transform={`translate(28, ${canvasHeight - 98})`}>

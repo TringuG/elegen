@@ -9,7 +9,6 @@ import {
   getEffectiveUpstreamBreaker,
   getEffectiveInternalDevice,
   getEffectiveManufacturingInfo,
-  calculateDinRailAllocation,
 } from './electricalEngine';
 
 export interface PdfExportOptions {
@@ -223,78 +222,6 @@ function wrapCanvasText(
   return lines.length > 0 ? lines : [fitText(ctx, text, maxWidth)];
 }
 
-/**
- * Finds clean horizontal white-band slice intervals on a rendered schematic canvas
- * so tall multi-row portrait diagrams paginate cleanly between rows without cutting text or boxes.
- */
-function computeCleanSchematicSlices(
-  offCanvas: HTMLCanvasElement,
-  maxSliceH: number
-): Array<{ sy: number; sh: number }> {
-  const totalH = offCanvas.height;
-  const totalW = offCanvas.width;
-  if (totalH <= maxSliceH) {
-    return [{ sy: 0, sh: totalH }];
-  }
-
-  const offCtx = offCanvas.getContext('2d');
-  if (!offCtx) {
-    const fallback: Array<{ sy: number; sh: number }> = [];
-    for (let y = 0; y < totalH; y += maxSliceH) {
-      fallback.push({ sy: y, sh: Math.min(maxSliceH, totalH - y) });
-    }
-    return fallback;
-  }
-
-  const scanXStart = Math.round(totalW * 0.12);
-  const scanXEnd = Math.round(totalW * 0.95);
-  const imageData = offCtx.getImageData(0, 0, totalW, totalH).data;
-
-  const isRowWhite = (y: number): boolean => {
-    const rowOffset = y * totalW * 4;
-    for (let x = scanXStart; x < scanXEnd; x += 4) {
-      const idx = rowOffset + x * 4;
-      if (imageData[idx] < 248 || imageData[idx + 1] < 248 || imageData[idx + 2] < 248) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const slices: Array<{ sy: number; sh: number }> = [];
-  let sy = 0;
-
-  while (sy < totalH) {
-    const remaining = totalH - sy;
-    if (remaining <= maxSliceH) {
-      slices.push({ sy, sh: remaining });
-      break;
-    }
-
-    const idealEnd = sy + maxSliceH;
-    const minCutY = sy + Math.round(maxSliceH * 0.42);
-    let bestCutY = idealEnd;
-
-    let bandHeight = 0;
-    for (let y = idealEnd - 4; y >= minCutY; y--) {
-      if (isRowWhite(y)) {
-        bandHeight++;
-        if (bandHeight >= 14) {
-          bestCutY = y + Math.floor(bandHeight / 2);
-          break;
-        }
-      } else {
-        bandHeight = 0;
-      }
-    }
-
-    const sh = Math.max(200, bestCutY - sy);
-    slices.push({ sy, sh });
-    sy += sh;
-  }
-
-  return slices;
-}
 
 export interface BreakerScheduleRow {
   label: string;
@@ -362,8 +289,8 @@ export function buildBreakerScheduleRows(project: SwitchboardProject): BreakerSc
 }
 
 /**
- * Draws the shared outer STN EN ISO 5457 frame, top header, and bottom STN ISO 7200 stamp
- * onto a Portrait A4 sheet (1800 x 2545 px).
+ * Draws the shared outer STN EN ISO 5457 frame and bottom STN ISO 7200 stamp
+ * onto a Portrait A4 table sheet (1800 x 2545 px) without any redundant top header block.
  */
 function drawPortraitA4Chrome(
   ctx: CanvasRenderingContext2D,
@@ -371,11 +298,10 @@ function drawPortraitA4Chrome(
   pageW: number,
   pageH: number,
   margin: number,
-  subtitleTag: string,
+  _subtitleTag: string,
   formatLabel: string
 ): { contentW: number; bodyTopY: number; bodyAvailH: number } {
   const contentW = pageW - margin * 2;
-  const headerH = 152;
   const footerStampH = 118;
 
   ctx.fillStyle = '#FFFFFF';
@@ -386,75 +312,7 @@ function drawPortraitA4Chrome(
   ctx.lineWidth = 3.5;
   ctx.strokeRect(margin - 16, margin - 16, contentW + 32, pageH - (margin - 16) * 2);
 
-  const upstream = getEffectiveUpstreamBreaker(project);
-  const internalDev = getEffectiveInternalDevice(project);
-  const din = calculateDinRailAllocation(project);
-
-  // 1. TOP HEADER
-  const curY = margin;
-  ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(margin, curY, contentW, headerH);
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(margin, curY, contentW, headerH);
-
-  const metaBoxW = 430;
-  const metaBoxX = margin + contentW - metaBoxW;
-  const leftTextW = contentW - metaBoxW - 36;
-
-  ctx.fillStyle = '#0052CC';
-  ctx.font = 'bold 21px "JetBrains Mono", monospace';
-  ctx.fillText(fitText(ctx, subtitleTag, leftTextW), margin + 22, curY + 34);
-
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 33px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(fitText(ctx, project.name, leftTextW), margin + 22, curY + 76);
-
-  const upstreamSummary = upstream.enabled
-    ? `${upstream.designation}: ${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent}A`
-    : `${upstream.designation}: Nezahrnutý`;
-  const internalSummary = internalDev.enabled
-    ? `${internalDev.designation}: ${internalDev.deviceType} ${internalDev.poles} ${internalDev.ratedCurrent}A`
-    : 'Bez hl. prvku';
-
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 19px "JetBrains Mono", monospace';
-  ctx.fillText(
-    fitText(
-      ctx,
-      `${upstreamSummary} | ${internalSummary} | ${project.supplySystem.toUpperCase()} (${project.voltage}, ${project.networkSystem})`,
-      leftTextW
-    ),
-    margin + 22,
-    curY + 109
-  );
-  ctx.fillStyle = '#1E293B';
-  ctx.font = '600 18px "JetBrains Mono", monospace';
-  ctx.fillText(
-    fitText(ctx, `Prívod: ${project.supplyCable} | Krytie: ${project.ipRating}`, leftTextW),
-    margin + 22,
-    curY + 136
-  );
-
-  // Right metadata box
-  ctx.beginPath();
-  ctx.moveTo(metaBoxX, curY);
-  ctx.lineTo(metaBoxX, curY + headerH);
-  ctx.stroke();
-
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 19px "JetBrains Mono", monospace';
-  ctx.fillText(fitText(ctx, `Projekt: ${project.projectNumber}`, metaBoxW - 32), metaBoxX + 18, curY + 42);
-  ctx.fillText(`Dátum: ${project.projectDate}`, metaBoxX + 18, curY + 76);
-  ctx.fillText(
-    `DIN: ${din.totalUsedModules} / ${din.totalCapacityModules} M (${project.ipRating})`,
-    metaBoxX + 18,
-    curY + 110
-  );
-  ctx.fillStyle = '#0052CC';
-  ctx.fillText(formatLabel, metaBoxX + 18, curY + 140);
-
-  // 2. BOTTOM STN ISO 7200 TITLE BLOCK STAMP
+  // BOTTOM STN ISO 7200 TITLE BLOCK STAMP
   const stampY = pageH - margin - footerStampH;
   ctx.fillStyle = '#F8FAFC';
   ctx.fillRect(margin, stampY, contentW, footerStampH);
@@ -512,14 +370,14 @@ function drawPortraitA4Chrome(
     stampY + 99
   );
 
-  const bodyTopY = curY + headerH + 20;
+  const bodyTopY = margin;
   const bodyAvailH = stampY - 20 - bodyTopY;
 
   return { contentW, bodyTopY, bodyAvailH };
 }
 
 /**
- * Renders the clean engineering drawing page(s) (Pure Schematic + Breaker-to-Circuit Schedule Table)
+ * Renders the clean engineering drawing page(s) (Pure Schematic on 1 Sheet + Breaker-to-Circuit Schedule Table)
  * onto high-resolution HTML5 Canvas element(s), optimized for A4 Portrait or A3/A4 Landscape printing.
  */
 export async function renderCleanSchemaPagesToCanvases(
@@ -548,7 +406,7 @@ export async function renderCleanSchemaPagesToCanvases(
   }
 
   // ===========================================================================
-  // MODE A: PORTRAIT A4 (NA VÝŠKU) — ČITATEĽNÉ VEĽKÉ PÍSMO NA TLAČIARNI A4
+  // MODE A: PORTRAIT A4 (NA VÝŠKU) — CELÁ SCHÉMA VŽDY NA JEDNOM LISTE (STRANA 1)
   // ===========================================================================
   if (orientation === 'portrait') {
     const pageW = 1800; // Exact ISO A4 Portrait ratio (1 : 1.414)
@@ -557,110 +415,34 @@ export async function renderCleanSchemaPagesToCanvases(
     const contentW = pageW - margin * 2;
     const canvases: HTMLCanvasElement[] = [];
 
-    // 1. Rasterize SVG at full A4 Portrait resolution so zero text shrinks
+    // 1. Page 1: Always fit the ENTIRE electrical schematic onto a single A4 Portrait sheet
+    //    without any duplicate outer header/footer chrome (the SVG has its own title & STN stamp).
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = pageW;
+    pageCanvas.height = pageH;
+    const pCtx = pageCanvas.getContext('2d')!;
+    pCtx.fillStyle = '#FFFFFF';
+    pCtx.fillRect(0, 0, pageW, pageH);
+
     if (svgRendered) {
-      const aspect = svgRendered.height / Math.max(1, svgRendered.width);
-      if (aspect <= 1.5) {
-        // Single unified A4 Portrait schematic (1000 x 1414) — render full-page on Page 1
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = pageW;
-        pageCanvas.height = pageH;
-        const pCtx = pageCanvas.getContext('2d')!;
-        pCtx.fillStyle = '#FFFFFF';
-        pCtx.fillRect(0, 0, pageW, pageH);
+      const pad = 20;
+      const availW = pageW - pad * 2;
+      const availH = pageH - pad * 2;
+      const scale = Math.min(availW / svgRendered.width, availH / svgRendered.height);
+      const drawW = Math.round(svgRendered.width * scale);
+      const drawH = Math.round(svgRendered.height * scale);
+      const drawX = Math.round((pageW - drawW) / 2);
+      const drawY = Math.round((pageH - drawH) / 2);
 
-        const pad = 20;
-        const availW = pageW - pad * 2;
-        const availH = pageH - pad * 2;
-        const scale = Math.min(availW / svgRendered.width, availH / svgRendered.height);
-        const drawW = Math.round(svgRendered.width * scale);
-        const drawH = Math.round(svgRendered.height * scale);
-        const drawX = Math.round((pageW - drawW) / 2);
-        const drawY = Math.round((pageH - drawH) / 2);
-
-        pCtx.drawImage(svgRendered.img, drawX, drawY, drawW, drawH);
-        canvases.push(pageCanvas);
-      } else {
-        const targetW = contentW;
-        const targetH = Math.max(
-          400,
-          Math.round((svgRendered.height / svgRendered.width) * targetW)
-        );
-        const offCanvas = document.createElement('canvas');
-        offCanvas.width = targetW;
-        offCanvas.height = targetH;
-        const offCtx = offCanvas.getContext('2d')!;
-        offCtx.fillStyle = '#FFFFFF';
-        offCtx.fillRect(0, 0, targetW, targetH);
-        offCtx.drawImage(svgRendered.img, 0, 0, targetW, targetH);
-
-        const headerH = 152;
-        const footerStampH = 118;
-        const maxSchematicH = pageH - margin - headerH - 20 - 20 - footerStampH - margin;
-        const slices = computeCleanSchematicSlices(offCanvas, maxSchematicH);
-
-        slices.forEach((slice, sliceIdx) => {
-          const pageCanvas = document.createElement('canvas');
-          pageCanvas.width = pageW;
-          pageCanvas.height = pageH;
-          const pCtx = pageCanvas.getContext('2d')!;
-
-          const subtitle =
-            slices.length > 1
-              ? `ELEKTRICKÁ SCHÉMA ROZVÁDZAČA (ČASŤ ${sliceIdx + 1}/${slices.length}) • STN EN 61439-3`
-              : 'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617';
-
-          const { bodyTopY } = drawPortraitA4Chrome(
-            pCtx,
-            project,
-            pageW,
-            pageH,
-            margin,
-            subtitle,
-            `${paperFormat} NA VÝŠKU`
-          );
-
-          pCtx.fillStyle = '#FFFFFF';
-          pCtx.fillRect(margin, bodyTopY, contentW, slice.sh);
-          pCtx.drawImage(
-            offCanvas,
-            0,
-            slice.sy,
-            targetW,
-            slice.sh,
-            margin,
-            bodyTopY,
-            contentW,
-            slice.sh
-          );
-          pCtx.strokeStyle = '#000000';
-          pCtx.lineWidth = 2.5;
-          pCtx.strokeRect(margin, bodyTopY, contentW, slice.sh);
-
-          canvases.push(pageCanvas);
-        });
-      }
+      pCtx.drawImage(svgRendered.img, drawX, drawY, drawW, drawH);
     } else {
-      const pageCanvas = document.createElement('canvas');
-      pageCanvas.width = pageW;
-      pageCanvas.height = pageH;
-      const pCtx = pageCanvas.getContext('2d')!;
-      const { bodyTopY } = drawPortraitA4Chrome(
-        pCtx,
-        project,
-        pageW,
-        pageH,
-        margin,
-        'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617',
-        `${paperFormat} NA VÝŠKU`
-      );
       pCtx.fillStyle = '#000000';
       pCtx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
-      pCtx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 32, bodyTopY + 64);
-      canvases.push(pageCanvas);
+      pCtx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 32, margin + 64);
     }
+    canvases.push(pageCanvas);
 
-    // 2. Dedicated A4 Portrait Page(s) for Breaker-to-Circuit Schedule (veľké čitateľné písmo)
+    // 2. Page 2+: Dedicated A4 Portrait Page(s) for Breaker-to-Circuit Schedule
     const tableCols = [
       { title: 'Istič', width: 130 },
       { title: 'Okruh / Spotrebič na ističi', width: 495 },
@@ -673,7 +455,7 @@ export async function renderCleanSchemaPagesToCanvases(
     const tableHeaderH = 54;
     const rowH = 74;
 
-    const sampleAvailH = pageH - margin - 152 - 20 - 20 - 118 - margin;
+    const sampleAvailH = pageH - margin - 20 - 118 - margin;
     const rowsPerPage = Math.max(
       8,
       Math.floor((sampleAvailH - sectionTitleH - tableHeaderH - 12) / rowH)
@@ -983,130 +765,42 @@ export async function renderCleanSchemaPagesToCanvases(
   }
 
   // ===========================================================================
-  // MODE B: LANDSCAPE (NA ŠÍRKU) — A4 / A3 / A2 S VÄČŠÍMI A KONTRASTNEJŠÍMI FONTMI
+  // MODE B: LANDSCAPE (NA ŠÍRKU) — CELÁ SCHÉMA VŽDY NA JEDNOM LISTE (STRANA 1)
   // ===========================================================================
-  const upstream = getEffectiveUpstreamBreaker(project);
-  const internalDev = getEffectiveInternalDevice(project);
-  const din = calculateDinRailAllocation(project);
-
   const pageW = 2400;
+  const page1H = 1697; // Exact ISO A4/A3 Landscape ratio (1.414 : 1)
   const margin = 56;
   const contentW = pageW - margin * 2;
-
-  const schemaDrawW = contentW;
-  const schemaDrawH = svgRendered
-    ? Math.round((svgRendered.height / svgRendered.width) * schemaDrawW)
-    : 760;
-
-  const headerH = 128;
   const sectionTitleH = 50;
   const tableHeaderH = 48;
   const tableRowH = 46;
-  const tableTotalH =
-    sectionTitleH + tableHeaderH + Math.max(1, breakerRows.length) * tableRowH + 20;
   const footerStampH = 104;
 
-  // For A4 landscape or large schematics, move the schedule table to Page 2 so nothing shrinks below readable pt
-  const combinedH =
-    margin + headerH + 24 + schemaDrawH + 28 + tableTotalH + 24 + footerStampH + margin;
-  const splitScheduleToSeparatePage = paperFormat === 'A4' || combinedH > 1950;
-
-  const page1H = splitScheduleToSeparatePage
-    ? Math.max(1697, margin + headerH + 24 + schemaDrawH + 24 + footerStampH + margin)
-    : Math.max(1697, combinedH);
-
+  // 1. Page 1: Fit the ENTIRE electrical schematic onto a single Landscape sheet
+  //    without any duplicate outer header/footer chrome (the SVG has its own title & STN stamp).
   const canvas1 = document.createElement('canvas');
   canvas1.width = pageW;
   canvas1.height = page1H;
   const ctx = canvas1.getContext('2d')!;
-
-  // White paper background
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, pageW, page1H);
 
-  // Outer engineering border (STN EN ISO 5457)
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 3.5;
-  ctx.strokeRect(margin - 16, margin - 16, contentW + 32, page1H - (margin - 16) * 2);
-
-  let curY = margin;
-
-  // 1. TOP DRAWING HEADER
-  ctx.fillStyle = '#F8FAFC';
-  ctx.fillRect(margin, curY, contentW, headerH);
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(margin, curY, contentW, headerH);
-
-  ctx.fillStyle = '#0052CC';
-  ctx.font = 'bold 20px "JetBrains Mono", monospace';
-  ctx.fillText(
-    'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA A ROZPIS ISTIČOV • STN EN 61439-3 / STN EN 60617',
-    margin + 22,
-    curY + 34
-  );
-
-  ctx.fillStyle = '#000000';
-  ctx.font = 'bold 34px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(fitText(ctx, project.name, contentW - 500), margin + 22, curY + 76);
-
-  const upstreamSummary = upstream.enabled
-    ? `Pred elektromerom (${upstream.designation}): ${upstream.poles} ${upstream.characteristic}${upstream.ratedCurrent} A (${upstream.placement})`
-    : `Pred elektromerom (${upstream.designation}): Nezahrnutý`;
-  const internalSummary = internalDev.enabled
-    ? `V rozvádzači (${internalDev.designation}): ${internalDev.deviceType} (${internalDev.poles} ${internalDev.hasOvercurrentProtection && internalDev.characteristic ? internalDev.characteristic : ''}${internalDev.ratedCurrent} A)`
-    : 'V rozvádzači: Bez hl. prvku';
-
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 19px "JetBrains Mono", monospace';
-  ctx.fillText(
-    fitText(
-      ctx,
-      `${upstreamSummary}   |   ${internalSummary}   |   Sústava: ${project.supplySystem.toUpperCase()} (${project.voltage}, ${project.networkSystem})   |   Prívod: ${project.supplyCable}`,
-      contentW - 490
-    ),
-    margin + 22,
-    curY + 110
-  );
-
-  // Right-side metadata box inside top header
-  const metaBoxX = margin + contentW - 440;
-  ctx.beginPath();
-  ctx.moveTo(metaBoxX, curY);
-  ctx.lineTo(metaBoxX, curY + headerH);
-  ctx.stroke();
-
-  ctx.fillStyle = '#0F172A';
-  ctx.font = 'bold 18px "JetBrains Mono", monospace';
-  ctx.fillText(`Číslo projektu: ${project.projectNumber}`, metaBoxX + 20, curY + 40);
-  ctx.fillText(`Dátum: ${project.projectDate}`, metaBoxX + 20, curY + 72);
-  ctx.fillText(
-    `Kapacita: ${din.totalUsedModules} / ${din.totalCapacityModules} M (${project.ipRating})`,
-    metaBoxX + 20,
-    curY + 104
-  );
-
-  curY += headerH + 24;
-
-  // 2. PURE ELECTRICAL SCHEMATIC
   if (svgRendered) {
-    ctx.save();
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(margin, curY, schemaDrawW, schemaDrawH);
-    ctx.drawImage(svgRendered.img, margin, curY, schemaDrawW, schemaDrawH);
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2.5;
-    ctx.strokeRect(margin, curY, schemaDrawW, schemaDrawH);
-    ctx.restore();
+    const pad = 20;
+    const availW = pageW - pad * 2;
+    const availH = page1H - pad * 2;
+    const scale = Math.min(availW / svgRendered.width, availH / svgRendered.height);
+    const drawW = Math.round(svgRendered.width * scale);
+    const drawH = Math.round(svgRendered.height * scale);
+    const drawX = Math.round((pageW - drawW) / 2);
+    const drawY = Math.round((page1H - drawH) / 2);
+
+    ctx.drawImage(svgRendered.img, drawX, drawY, drawW, drawH);
   } else {
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(margin, curY, schemaDrawW, schemaDrawH);
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 26px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 40, curY + 60);
+    ctx.fillText('Elektrická schéma zapojenia rozvádzača', margin + 40, margin + 60);
   }
-
-  curY += schemaDrawH + 28;
 
   const drawLandscapeBreakerTable = (
     targetCtx: CanvasRenderingContext2D,
@@ -1119,7 +813,7 @@ export async function renderCleanSchemaPagesToCanvases(
     targetCtx.fillStyle = '#FFFFFF';
     targetCtx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
     targetCtx.fillText(
-      'POPIS K SCHÉME — ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV (KTORÝ OKRUH JE NA KTOROM ISTIČI)',
+      `POPIS K SCHÉME — ROZPIS ISTIČOV A ELEKTRICKÝCH OKRUHOV • ${project.name}`,
       margin + 18,
       ty + 33
     );
@@ -1261,31 +955,24 @@ export async function renderCleanSchemaPagesToCanvases(
 
   const canvases: HTMLCanvasElement[] = [canvas1];
 
-  if (!splitScheduleToSeparatePage) {
-    drawLandscapeBreakerTable(ctx, curY, breakerRows);
-    drawLandscapeStamp(ctx, page1H);
-  } else {
-    drawLandscapeStamp(ctx, page1H);
+  // 2. Page 2: Separate Landscape Page for Breaker-to-Circuit Schedule
+  const schedH = Math.max(
+    1697,
+    margin * 2 + sectionTitleH + tableHeaderH + breakerRows.length * tableRowH + footerStampH + 80
+  );
+  const schedCanvas = document.createElement('canvas');
+  schedCanvas.width = pageW;
+  schedCanvas.height = schedH;
+  const sCtx = schedCanvas.getContext('2d')!;
+  sCtx.fillStyle = '#FFFFFF';
+  sCtx.fillRect(0, 0, pageW, schedH);
+  sCtx.strokeStyle = '#000000';
+  sCtx.lineWidth = 3.5;
+  sCtx.strokeRect(margin - 16, margin - 16, contentW + 32, schedH - (margin - 16) * 2);
 
-    // Separate Landscape Page for Breaker-to-Circuit Schedule
-    const schedH = Math.max(
-      1697,
-      margin * 2 + sectionTitleH + tableHeaderH + breakerRows.length * tableRowH + footerStampH + 80
-    );
-    const schedCanvas = document.createElement('canvas');
-    schedCanvas.width = pageW;
-    schedCanvas.height = schedH;
-    const sCtx = schedCanvas.getContext('2d')!;
-    sCtx.fillStyle = '#FFFFFF';
-    sCtx.fillRect(0, 0, pageW, schedH);
-    sCtx.strokeStyle = '#000000';
-    sCtx.lineWidth = 3.5;
-    sCtx.strokeRect(margin - 16, margin - 16, contentW + 32, schedH - (margin - 16) * 2);
-
-    drawLandscapeBreakerTable(sCtx, margin, breakerRows);
-    drawLandscapeStamp(sCtx, schedH);
-    canvases.push(schedCanvas);
-  }
+  drawLandscapeBreakerTable(sCtx, margin, breakerRows);
+  drawLandscapeStamp(sCtx, schedH);
+  canvases.push(schedCanvas);
 
   // Optional Page: Bill of Materials (Kusovník) if requested
   if (options.includeBom) {
