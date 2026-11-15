@@ -192,45 +192,98 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
     currentX += colSpacing;
   });
 
-  // Portrait A4 layout geometry (4 columns per row, compact 960px width, giant readable fonts)
+  // Portrait A4 layout geometry:
+  // Vertical Main Busbar running TOP-TO-BOTTOM (zhora dole) on the left of the A4 Portrait sheet,
+  // with each RCD group, breaker (FAx), cable, and appliance box drawn HORIZONTALLY ACROSS THE WIDTH
+  // of the Portrait sheet ("na šírku tej výšky") from left to right.
   const isPortrait = schemaOrientation === 'portrait';
-  const portraitColsPerRow = 4;
-  const portraitColX = [215, 403, 591, 779];
-  const portraitRowsStartY = displayMode === 'single-line' ? 378 : 438;
-  const portraitRowHeight = 452;
 
-  const portraitRows: RenderColumn[][] = [];
-  for (let i = 0; i < columns.length; i += portraitColsPerRow) {
-    portraitRows.push(columns.slice(i, i + portraitColsPerRow));
+  interface PortraitSpineItem {
+    kind: 'rcd-group' | 'rcd-empty' | 'rcbo-standalone' | 'direct-group';
+    rcd?: RcdConfig;
+    circuits: CircuitConfig[];
+    topY: number;
+    height: number;
   }
-  if (portraitRows.length === 0) {
-    portraitRows.push([]);
+
+  const totalPortraitCircuitCount =
+    rcdGroups.reduce((acc, g) => acc + Math.max(1, g.circuits.length), 0) +
+    directCircuits.length;
+
+  const portraitCircuitRowH = totalPortraitCircuitCount <= 6 ? 84 : 74;
+  const portraitGroupHeaderH = 26;
+  const portraitGroupGap = totalPortraitCircuitCount <= 6 ? 18 : 11;
+  const portraitSpineStartY = 336;
+
+  const portraitSpineItems: PortraitSpineItem[] = [];
+  let spineCursorY = portraitSpineStartY;
+
+  rcdGroups.forEach((group) => {
+    if (group.rcd.deviceKind === 'RCBO' && group.circuits.length === 0) {
+      const h = portraitCircuitRowH + 8;
+      portraitSpineItems.push({
+        kind: 'rcbo-standalone',
+        rcd: group.rcd,
+        circuits: [],
+        topY: spineCursorY,
+        height: h,
+      });
+      spineCursorY += h + portraitGroupGap;
+    } else if (group.circuits.length === 0) {
+      const h = 72;
+      portraitSpineItems.push({
+        kind: 'rcd-empty',
+        rcd: group.rcd,
+        circuits: [],
+        topY: spineCursorY,
+        height: h,
+      });
+      spineCursorY += h + portraitGroupGap;
+    } else {
+      const h = portraitGroupHeaderH + group.circuits.length * portraitCircuitRowH;
+      portraitSpineItems.push({
+        kind: 'rcd-group',
+        rcd: group.rcd,
+        circuits: group.circuits,
+        topY: spineCursorY,
+        height: h,
+      });
+      spineCursorY += h + portraitGroupGap;
+    }
+  });
+
+  if (directCircuits.length > 0) {
+    const h = portraitGroupHeaderH + directCircuits.length * portraitCircuitRowH;
+    portraitSpineItems.push({
+      kind: 'direct-group',
+      circuits: directCircuits,
+      topY: spineCursorY,
+      height: h,
+    });
+    spineCursorY += h + portraitGroupGap;
   }
 
   const landscapeWidth = Math.max(1320, currentX + 140);
-  const landscapeHeight = displayMode === 'wiring-diagram' ? 1050 : 980;
+  const landscapeHeight = 1220;
 
-  const portraitWidth = 960;
-  const portraitHeight = Math.max(
-    1320,
-    portraitRowsStartY + portraitRows.length * portraitRowHeight + 112
-  );
+  const portraitWidth = 1000;
+  const portraitHeight = Math.max(1414, spineCursorY + 114);
 
   const canvasWidth = isPortrait ? portraitWidth : landscapeWidth;
   const canvasHeight = isPortrait ? portraitHeight : landscapeHeight;
 
   // Busbar Y coordinates for Landscape mode
   const busY_L1 = 290;
-  const busY_L2 = 310;
-  const busY_L3 = 330;
-  const busY_N = 352;
-  const busY_PE = 374;
+  const busY_L2 = 308;
+  const busY_L3 = 326;
+  const busY_N = 346;
+  const busY_PE = 366;
 
-  const rcdBoxY = 426;
-  const rcdBusY = 544;
-  const mcbBoxY = 612;
-  const cableStartY = 670;
-  const loadBoxY = 788;
+  const rcdBoxY = 406;
+  const rcdBusY = 540;
+  const mcbBoxY = 590;
+  const cableStartY = 648;
+  const loadBoxY = 790;
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -1100,8 +1153,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
         <div
           className={`schema-canvas-transform ${
             compactMode
-              ? 'w-full flex items-center justify-center p-0'
-              : 'min-w-max min-h-full flex items-center justify-center p-4'
+              ? 'w-full flex items-start justify-center p-0'
+              : 'min-w-max min-h-full flex items-start justify-center p-4'
           }`}
           style={
             compactMode
@@ -1149,1132 +1202,2019 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
             />
 
             {/* ================================================================= */}
-            {/* PORTRAIT A4 MODE (NA VÝŠKU) — 4 STĹPCE NA RAD, VEĽKÉ PÍSMO        */}
+            {/* PORTRAIT A4 MODE (NA VÝŠKU A4):                                   */}
+            {/* ZVISLÁ ZBERNICA ZHORA DOLE + VODOROVNÉ VETVY NA ŠÍRKU TEJ VÝŠKY   */}
             {/* ================================================================= */}
             {isPortrait ? (
-              <>
-                {/* Top Header Banner */}
-                <g transform="translate(28, 30)">
-                  <text
-                    x={0}
-                    y={18}
-                    fill="#000000"
-                    fontSize={17}
-                    fontWeight="bold"
-                    fontFamily="Plus Jakarta Sans, sans-serif"
-                  >
-                    {project.name.length > 52
-                      ? `${project.name.slice(0, 51).toUpperCase()}…`
-                      : project.name.toUpperCase()}{' '}
-                    —{' '}
-                    {displayMode === 'single-line'
-                      ? 'JEDNOPÓLOVÁ SCHÉMA (1L)'
-                      : displayMode === 'multi-line'
-                      ? 'VIACPÓLOVÁ SCHÉMA (3L)'
-                      : 'DETAILNÉ ZAPOJENIE'}
-                  </text>
-                  <text
-                    x={0}
-                    y={39}
-                    fill="#0F172A"
-                    fontSize={12.5}
-                    fontWeight="bold"
-                    fontFamily="JetBrains Mono, monospace"
-                  >
-                    Sústava: {project.networkSystem} | {project.supplySystem.toUpperCase()} (
-                    {project.voltage}) | Prívod: {project.supplyCable} | Krytie: {project.ipRating}
-                  </text>
-                </g>
+              (() => {
+                // X-coordinates for Vertical Main Busbar on the left side of the Portrait A4 sheet
+                const mainBus1LX = 88;
+                const mainBusL1X = 56;
+                const mainBusL2X = 68;
+                const mainBusL3X = 80;
+                const mainBusNX = 92;
+                const mainBusPEX = 104;
 
-                {/* Left-Top Vertical Incoming Chain: Prívod -> QF0 -> kWh -> QS1/QF1 */}
-                <g transform="translate(95, 84)">
-                  {/* Step 1: PRÍVOD */}
-                  <line x1={0} y1={0} x2={0} y2={24} stroke="#000000" strokeWidth={2.8} />
-                  <line x1={-7} y1={8} x2={7} y2={15} stroke="#000000" strokeWidth={1.8} />
-                  <text
-                    x={16}
-                    y={14}
-                    fill="#000000"
-                    fontSize={12.5}
-                    fontFamily="JetBrains Mono, monospace"
-                    fontWeight="bold"
-                  >
-                    PRÍVOD EL. ENERGIE ({project.networkSystem} • {project.voltage})
-                  </text>
+                // Determine the lowest Y tap on the Vertical Main Busbar
+                let lastMainTapY = 330;
+                portraitSpineItems.forEach((item) => {
+                  if (item.kind === 'rcd-group') {
+                    const firstCy =
+                      item.topY + portraitGroupHeaderH + portraitCircuitRowH / 2;
+                    if (firstCy > lastMainTapY) lastMainTapY = firstCy;
+                  } else if (item.kind === 'rcd-empty' || item.kind === 'rcbo-standalone') {
+                    const cy = item.topY + item.height / 2;
+                    if (cy > lastMainTapY) lastMainTapY = cy;
+                  } else if (item.kind === 'direct-group' && item.circuits.length > 0) {
+                    const lastCy =
+                      item.topY +
+                      portraitGroupHeaderH +
+                      (item.circuits.length - 1) * portraitCircuitRowH +
+                      portraitCircuitRowH / 2;
+                    if (lastCy > lastMainTapY) lastMainTapY = lastCy;
+                  }
+                });
+                const mainBusBottomY = Math.max(360, lastMainTapY + 16);
 
-                  {/* Step 2: QF0 */}
-                  <g
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedElement({ type: 'main' });
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <rect
-                      x={-34}
-                      y={24}
-                      width={68}
-                      height={48}
-                      rx={4}
-                      fill={selectedElement?.type === 'main' ? '#EFF6FF' : '#FFFFFF'}
-                      stroke={selectedElement?.type === 'main' ? '#0066FF' : '#000000'}
-                      strokeWidth={selectedElement?.type === 'main' ? 3 : 2.2}
-                      strokeDasharray="5 2"
-                    />
-                    {upstreamBreaker.enabled ? (
-                      <>
-                        <line x1={0} y1={24} x2={0} y2={35} stroke="#000000" strokeWidth={2.2} />
-                        <line x1={0} y1={60} x2={0} y2={72} stroke="#000000" strokeWidth={2.2} />
-                        <line x1={0} y1={60} x2={-11} y2={38} stroke="#000000" strokeWidth={2.4} />
-                        <line x1={-5} y1={32} x2={5} y2={38} stroke="#000000" strokeWidth={1.8} />
-                        <line x1={-5} y1={38} x2={5} y2={32} stroke="#000000" strokeWidth={1.8} />
+                return (
+                  <>
+                    {/* Top Header Banner */}
+                    <g transform="translate(28, 28)">
+                      <text
+                        x={0}
+                        y={18}
+                        fill="#000000"
+                        fontSize={17.5}
+                        fontWeight="bold"
+                        fontFamily="Plus Jakarta Sans, sans-serif"
+                      >
+                        {project.name.length > 54
+                          ? `${project.name.slice(0, 53).toUpperCase()}…`
+                          : project.name.toUpperCase()}{' '}
+                        —{' '}
+                        {displayMode === 'single-line'
+                          ? 'JEDNOPÓLOVÁ SCHÉMA ZAPOJENIA (1L)'
+                          : displayMode === 'multi-line'
+                          ? 'TROJPÓLOVÁ / VIACPÓLOVÁ SCHÉMA (3L)'
+                          : 'DETAILNÁ SCHÉMA ZAPOJENIA (L1, L2, L3, N, PE)'}
+                      </text>
+                      <text
+                        x={0}
+                        y={39}
+                        fill="#0F172A"
+                        fontSize={12.5}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                      >
+                        Sústava: {project.networkSystem} | {project.supplySystem.toUpperCase()} (
+                        {project.voltage}) | Prívod: {project.supplyCable} | Krytie:{' '}
+                        {project.ipRating}
+                      </text>
+                    </g>
+
+                    {/* Top Vertical Incoming Chain (Zhora dole): Prívod -> QF0 -> Elektromer -> QS1/QF1 */}
+                    <g transform={`translate(${mainBus1LX}, 78)`}>
+                      {/* Step 1: PRÍVOD */}
+                      {displayMode === 'single-line' ? (
+                        <>
+                          <line x1={0} y1={0} x2={0} y2={24} stroke="#000000" strokeWidth={3} />
+                          <line x1={-7} y1={8} x2={7} y2={15} stroke="#000000" strokeWidth={1.8} />
+                        </>
+                      ) : (
+                        <>
+                          <line x1={-32} y1={0} x2={-32} y2={24} stroke="#000000" strokeWidth={2.2} />
+                          {isThreePhase && (
+                            <>
+                              <line x1={-20} y1={0} x2={-20} y2={24} stroke="#000000" strokeWidth={2.2} />
+                              <line x1={-8} y1={0} x2={-8} y2={24} stroke="#000000" strokeWidth={2.2} />
+                            </>
+                          )}
+                          {project.networkSystem !== 'TN-C' && (
+                            <line x1={4} y1={0} x2={4} y2={202} stroke="#0369A1" strokeWidth={2} />
+                          )}
+                          <line
+                            x1={16}
+                            y1={0}
+                            x2={16}
+                            y2={202}
+                            stroke="#15803D"
+                            strokeWidth={2}
+                            strokeDasharray="5 3"
+                          />
+                        </>
+                      )}
+                      <text
+                        x={44}
+                        y={14}
+                        fill="#000000"
+                        fontSize={12.5}
+                        fontFamily="JetBrains Mono, monospace"
+                        fontWeight="bold"
+                      >
+                        PRÍVOD EL. ENERGIE ({project.networkSystem} • {project.voltage})
+                      </text>
+
+                      {/* Step 2: QF0 */}
+                      <g
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedElement({ type: 'main' });
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <rect
+                          x={displayMode === 'single-line' ? -30 : -44}
+                          y={24}
+                          width={displayMode === 'single-line' ? 60 : 72}
+                          height={48}
+                          rx={4}
+                          fill={selectedElement?.type === 'main' ? '#EFF6FF' : '#FFFFFF'}
+                          stroke={selectedElement?.type === 'main' ? '#0066FF' : '#000000'}
+                          strokeWidth={selectedElement?.type === 'main' ? 3 : 2.2}
+                          strokeDasharray="5 2"
+                        />
+                        {upstreamBreaker.enabled ? (
+                          <>
+                            {displayMode === 'single-line' || !isThreePhase ? (
+                              <>
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={24}
+                                  x2={displayMode === 'single-line' ? 0 : -32}
+                                  y2={35}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={60}
+                                  x2={displayMode === 'single-line' ? 0 : -32}
+                                  y2={72}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={60}
+                                  x2={displayMode === 'single-line' ? -10 : -40}
+                                  y2={38}
+                                  stroke="#000000"
+                                  strokeWidth={2.4}
+                                />
+                                <line
+                                  x1={(displayMode === 'single-line' ? 0 : -32) - 4.5}
+                                  y1={32}
+                                  x2={(displayMode === 'single-line' ? 0 : -32) + 4.5}
+                                  y2={38}
+                                  stroke="#000000"
+                                  strokeWidth={1.8}
+                                />
+                                <line
+                                  x1={(displayMode === 'single-line' ? 0 : -32) - 4.5}
+                                  y1={38}
+                                  x2={(displayMode === 'single-line' ? 0 : -32) + 4.5}
+                                  y2={32}
+                                  stroke="#000000"
+                                  strokeWidth={1.8}
+                                />
+                              </>
+                            ) : (
+                              [-32, -20, -8].map((poleX) => (
+                                <g key={`qf0-p-${poleX}`}>
+                                  <line x1={poleX} y1={24} x2={poleX} y2={35} stroke="#000000" strokeWidth={1.8} />
+                                  <line x1={poleX} y1={60} x2={poleX} y2={72} stroke="#000000" strokeWidth={1.8} />
+                                  <line x1={poleX} y1={60} x2={poleX - 6} y2={38} stroke="#000000" strokeWidth={2} />
+                                </g>
+                              ))
+                            )}
+                            <text
+                              x={44}
+                              y={43}
+                              fill="#000000"
+                              fontSize={13}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {upstreamBreaker.designation} – HLAVNÝ ISTIČ ({upstreamBreaker.placement.toUpperCase()})
+                            </text>
+                            <text
+                              x={44}
+                              y={61}
+                              fill="#0F172A"
+                              fontSize={12.5}
+                              fontFamily="JetBrains Mono, monospace"
+                              fontWeight="bold"
+                            >
+                              {upstreamBreaker.poles} {upstreamBreaker.characteristic}
+                              {upstreamBreaker.ratedCurrent}A / {upstreamBreaker.breakingCapacity} ({upstreamBreaker.manufacturer})
+                            </text>
+                          </>
+                        ) : (
+                          <>
+                            <line x1={0} y1={24} x2={0} y2={72} stroke="#475569" strokeWidth={2} strokeDasharray="4 3" />
+                            <text
+                              x={44}
+                              y={52}
+                              fill="#334155"
+                              fontSize={12}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {upstreamBreaker.designation} – Pred elektromerom (vypnutý)
+                            </text>
+                          </>
+                        )}
+                      </g>
+
+                      {/* Step 3: ELEKTROMER kWh */}
+                      {displayMode === 'single-line' || !isThreePhase ? (
+                        <line
+                          x1={displayMode === 'single-line' ? 0 : -32}
+                          y1={72}
+                          x2={displayMode === 'single-line' ? 0 : -32}
+                          y2={84}
+                          stroke="#000000"
+                          strokeWidth={2.4}
+                        />
+                      ) : (
+                        [-32, -20, -8].map((poleX) => (
+                          <line key={`em-in-${poleX}`} x1={poleX} y1={72} x2={poleX} y2={84} stroke="#000000" strokeWidth={1.9} />
+                        ))
+                      )}
+                      {electricityMeter.enabled ? (
+                        <g>
+                          <rect
+                            x={displayMode === 'single-line' ? -30 : -44}
+                            y={84}
+                            width={displayMode === 'single-line' ? 60 : 72}
+                            height={38}
+                            rx={4}
+                            fill="#FFFFFF"
+                            stroke="#000000"
+                            strokeWidth={2}
+                            strokeDasharray="4 2"
+                          />
+                          <circle
+                            cx={displayMode === 'single-line' ? 0 : -16}
+                            cy={103}
+                            r={13}
+                            fill="#F8FAFC"
+                            stroke="#000000"
+                            strokeWidth={1.6}
+                          />
+                          <text
+                            x={displayMode === 'single-line' ? 0 : -16}
+                            y={107}
+                            textAnchor="middle"
+                            fill="#000000"
+                            fontSize={10.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            kWh
+                          </text>
+                          <text
+                            x={44}
+                            y={99}
+                            fill="#000000"
+                            fontSize={12.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            ELEKTROMER ({electricityMeter.type})
+                          </text>
+                          <text
+                            x={44}
+                            y={116}
+                            fill="#1E293B"
+                            fontSize={11.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            {electricityMeter.location} • {electricityMeter.tariff}
+                          </text>
+                        </g>
+                      ) : (
+                        <line x1={0} y1={84} x2={0} y2={122} stroke="#000000" strokeWidth={2.4} />
+                      )}
+
+                      {/* Step 4: PRÍVOD DO ROZVÁDZAČA */}
+                      {displayMode === 'single-line' || !isThreePhase ? (
+                        <>
+                          <line
+                            x1={displayMode === 'single-line' ? 0 : -32}
+                            y1={122}
+                            x2={displayMode === 'single-line' ? 0 : -32}
+                            y2={148}
+                            stroke="#000000"
+                            strokeWidth={2.8}
+                          />
+                          <line
+                            x1={(displayMode === 'single-line' ? 0 : -32) - 7}
+                            y1={131}
+                            x2={(displayMode === 'single-line' ? 0 : -32) + 7}
+                            y2={137}
+                            stroke="#000000"
+                            strokeWidth={1.8}
+                          />
+                        </>
+                      ) : (
+                        [-32, -20, -8].map((poleX) => (
+                          <line key={`em-out-${poleX}`} x1={poleX} y1={122} x2={poleX} y2={148} stroke="#000000" strokeWidth={2} />
+                        ))
+                      )}
+                      <text
+                        x={44}
+                        y={140}
+                        fill="#000000"
+                        fontSize={12}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                      >
+                        PRÍVOD DO ROZVÁDZAČA ({project.supplyCable})
+                      </text>
+
+                      {/* Step 5: HLAVNÝ VYPÍNAČ / ISTIČ V ROZVÁDZAČI (QS1 / QF1) */}
+                      <g
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedElement({ type: 'internal-main' });
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <rect
+                          x={displayMode === 'single-line' ? -30 : -44}
+                          y={148}
+                          width={displayMode === 'single-line' ? 60 : 72}
+                          height={54}
+                          rx={4}
+                          fill={selectedElement?.type === 'internal-main' ? '#EFF6FF' : '#FFFFFF'}
+                          stroke={selectedElement?.type === 'internal-main' ? '#0066FF' : '#000000'}
+                          strokeWidth={selectedElement?.type === 'internal-main' ? 3 : 2.2}
+                        />
+                        {internalDevice.enabled ? (
+                          <>
+                            {displayMode === 'single-line' || !isThreePhase ? (
+                              <>
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={148}
+                                  x2={displayMode === 'single-line' ? 0 : -32}
+                                  y2={161}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={189}
+                                  x2={displayMode === 'single-line' ? 0 : -32}
+                                  y2={202}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                <line
+                                  x1={displayMode === 'single-line' ? 0 : -32}
+                                  y1={189}
+                                  x2={(displayMode === 'single-line' ? 0 : -32) - 11}
+                                  y2={164}
+                                  stroke="#000000"
+                                  strokeWidth={2.4}
+                                />
+                                {isInternalBreaker ? (
+                                  <>
+                                    <line
+                                      x1={(displayMode === 'single-line' ? 0 : -32) - 5}
+                                      y1={159}
+                                      x2={(displayMode === 'single-line' ? 0 : -32) + 5}
+                                      y2={165}
+                                      stroke="#000000"
+                                      strokeWidth={1.8}
+                                    />
+                                    <line
+                                      x1={(displayMode === 'single-line' ? 0 : -32) - 5}
+                                      y1={165}
+                                      x2={(displayMode === 'single-line' ? 0 : -32) + 5}
+                                      y2={159}
+                                      stroke="#000000"
+                                      strokeWidth={1.8}
+                                    />
+                                  </>
+                                ) : (
+                                  <>
+                                    <line
+                                      x1={(displayMode === 'single-line' ? 0 : -32) - 6}
+                                      y1={161}
+                                      x2={(displayMode === 'single-line' ? 0 : -32) + 6}
+                                      y2={161}
+                                      stroke="#000000"
+                                      strokeWidth={2.2}
+                                    />
+                                    <circle
+                                      cx={displayMode === 'single-line' ? 0 : -32}
+                                      cy={189}
+                                      r={2.6}
+                                      fill="#000000"
+                                    />
+                                  </>
+                                )}
+                              </>
+                            ) : (
+                              [-32, -20, -8].map((poleX) => (
+                                <g key={`qs1-p-${poleX}`}>
+                                  <line x1={poleX} y1={148} x2={poleX} y2={161} stroke="#000000" strokeWidth={1.8} />
+                                  <line x1={poleX} y1={189} x2={poleX} y2={202} stroke="#000000" strokeWidth={1.8} />
+                                  <line x1={poleX} y1={189} x2={poleX - 6} y2={164} stroke="#000000" strokeWidth={2} />
+                                </g>
+                              ))
+                            )}
+                            <text
+                              x={44}
+                              y={166}
+                              fill="#000000"
+                              fontSize={13}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {internalDevice.designation} – {internalDevice.deviceType.toUpperCase()} V ROZVÁDZAČI
+                            </text>
+                            <text
+                              x={44}
+                              y={184}
+                              fill="#0F172A"
+                              fontSize={12.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {internalDevice.poles}{' '}
+                              {isInternalBreaker
+                                ? `${internalDevice.characteristic || 'B'}${internalDevice.ratedCurrent}A (${internalDevice.breakingCapacity || '10 kA'})`
+                                : `In = ${internalDevice.ratedCurrent}A (bez nadprúd. ochrany)`}{' '}
+                              • {internalDevice.manufacturer}
+                            </text>
+                            <text
+                              x={44}
+                              y={200}
+                              fill="#334155"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="Plus Jakarta Sans, sans-serif"
+                            >
+                              {internalDevice.modules} mod. •{' '}
+                              {internalDevice.topologyPosition === 'ZA_SPD_PRED_RCD'
+                                ? 'Za SPD, pred chráničmi FI'
+                                : 'Na vstupe rozvádzača (pred SPD a FI)'}
+                            </text>
+                          </>
+                        ) : (
+                          <>
+                            <line x1={0} y1={148} x2={0} y2={202} stroke="#000000" strokeWidth={2.4} />
+                            <text
+                              x={44}
+                              y={178}
+                              fill="#334155"
+                              fontSize={12}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Priame napojenie zberníc (bez hl. prvku v rozvádzači)
+                            </text>
+                          </>
+                        )}
+                      </g>
+                    </g>
+
+                    {/* Right-Top Box: PEN Split Point */}
+                    {(project.networkSystem === 'TN-C-S' || displayMode === 'wiring-diagram') && (
+                      <g transform="translate(680, 78)">
+                        <rect
+                          x={0}
+                          y={0}
+                          width={284}
+                          height={66}
+                          rx={5}
+                          fill="#F0FDF4"
+                          stroke="#15803D"
+                          strokeWidth={2}
+                        />
                         <text
-                          x={44}
-                          y={43}
-                          fill="#000000"
-                          fontSize={13}
-                          fontWeight="bold"
-                          fontFamily="JetBrains Mono, monospace"
-                        >
-                          {upstreamBreaker.designation} – HLAVNÝ ISTIČ ({upstreamBreaker.placement.toUpperCase()})
-                        </text>
-                        <text
-                          x={44}
-                          y={61}
-                          fill="#0F172A"
-                          fontSize={12.5}
-                          fontFamily="JetBrains Mono, monospace"
-                          fontWeight="bold"
-                        >
-                          {upstreamBreaker.poles} {upstreamBreaker.characteristic}
-                          {upstreamBreaker.ratedCurrent}A / {upstreamBreaker.breakingCapacity} ({upstreamBreaker.manufacturer})
-                        </text>
-                      </>
-                    ) : (
-                      <>
-                        <line x1={0} y1={24} x2={0} y2={72} stroke="#475569" strokeWidth={2} strokeDasharray="4 3" />
-                        <text
-                          x={44}
-                          y={52}
-                          fill="#334155"
+                          x={142}
+                          y={21}
+                          textAnchor="middle"
+                          fill="#15803D"
                           fontSize={12}
                           fontWeight="bold"
                           fontFamily="JetBrains Mono, monospace"
                         >
-                          {upstreamBreaker.designation} – Pred elektromerom (vypnutý)
+                          {project.networkSystem === 'TN-C-S'
+                            ? 'BOD ROZDELENIA PEN → PE + N'
+                            : `UZOL PE / N (${project.networkSystem})`}
                         </text>
-                      </>
+                        <text
+                          x={142}
+                          y={40}
+                          textAnchor="middle"
+                          fill="#000000"
+                          fontSize={12}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          Ochranná svorkovnica PE + N
+                        </text>
+                        <text
+                          x={142}
+                          y={57}
+                          textAnchor="middle"
+                          fill="#0369A1"
+                          fontSize={11.5}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          HOP (MET) ≤ 10 Ω
+                        </text>
+                      </g>
                     )}
-                  </g>
 
-                  {/* Step 3: ELEKTROMER kWh */}
-                  <line x1={0} y1={72} x2={0} y2={84} stroke="#000000" strokeWidth={2.4} />
-                  {electricityMeter.enabled ? (
-                    <g>
+                    {/* Right-Top Surge Protector (SPD - FV1) tapping into Vertical Main Busbar at Y = 312 */}
+                    {mainBreaker.hasSurgeProtector && (
+                      <g
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedElement({ type: 'spd' });
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <line
+                          x1={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                          y1={312}
+                          x2={706}
+                          y2={312}
+                          stroke="#000000"
+                          strokeWidth={2.2}
+                        />
+                        <circle
+                          cx={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                          cy={312}
+                          r={4}
+                          fill="#000000"
+                        />
+                        <line x1={706} y1={244} x2={706} y2={312} stroke="#000000" strokeWidth={2.2} />
+                        <g transform="translate(706, 196)">
+                          <rect
+                            x={-26}
+                            y={8}
+                            width={52}
+                            height={40}
+                            rx={4}
+                            fill="#FFFFFF"
+                            stroke="#000000"
+                            strokeWidth={2}
+                          />
+                          <polygon points="-6,21 6,21 0,34" fill="#000000" />
+                          <line x1={-8} y1={34} x2={8} y2={34} stroke="#000000" strokeWidth={1.8} />
+                          <text
+                            x={34}
+                            y={22}
+                            fill="#000000"
+                            fontSize={12.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            FV1 – PREPÄŤOVÁ OCHRANA
+                          </text>
+                          <text
+                            x={34}
+                            y={38}
+                            fill="#0F172A"
+                            fontSize={12}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            {mainBreaker.surgeProtectorType} ({mainBreaker.manufacturer})
+                          </text>
+                          <line x1={0} y1={8} x2={0} y2={-6} stroke="#15803D" strokeWidth={2} />
+                          <line x1={-10} y1={-6} x2={10} y2={-6} stroke="#15803D" strokeWidth={2} />
+                          <line x1={-6} y1={-11} x2={6} y2={-11} stroke="#15803D" strokeWidth={2} />
+                          <line x1={-3} y1={-16} x2={3} y2={-16} stroke="#15803D" strokeWidth={2} />
+                        </g>
+                      </g>
+                    )}
+
+                    {/* ================================================================= */}
+                    {/* VERTICAL MAIN BUSBAR (ZHORA DOLE) ON LEFT OF PORTRAIT A4 SHEET   */}
+                    {/* ================================================================= */}
+                    {displayMode === 'single-line' ? (
+                      <g>
+                        <line
+                          x1={mainBus1LX}
+                          y1={280}
+                          x2={mainBus1LX}
+                          y2={mainBusBottomY}
+                          stroke="#000000"
+                          strokeWidth={3.8}
+                        />
+                        <circle cx={mainBus1LX} cy={312} r={4.2} fill="#000000" />
+                        <text
+                          x={24}
+                          y={316}
+                          fill="#000000"
+                          fontSize={12}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          {isThreePhase ? '3L+N+PE' : 'L+N+PE'}
+                        </text>
+                      </g>
+                    ) : (
+                      <g>
+                        <line
+                          x1={mainBusL1X}
+                          y1={280}
+                          x2={mainBusL1X}
+                          y2={mainBusBottomY}
+                          stroke="#000000"
+                          strokeWidth={2.4}
+                        />
+                        {isThreePhase && (
+                          <>
+                            <line
+                              x1={mainBusL2X}
+                              y1={280}
+                              x2={mainBusL2X}
+                              y2={mainBusBottomY}
+                              stroke="#000000"
+                              strokeWidth={2.4}
+                            />
+                            <line
+                              x1={mainBusL3X}
+                              y1={280}
+                              x2={mainBusL3X}
+                              y2={mainBusBottomY}
+                              stroke="#000000"
+                              strokeWidth={2.4}
+                            />
+                          </>
+                        )}
+                        {project.networkSystem !== 'TN-C' && (
+                          <line
+                            x1={mainBusNX}
+                            y1={280}
+                            x2={mainBusNX}
+                            y2={mainBusBottomY}
+                            stroke="#0369A1"
+                            strokeWidth={2.4}
+                          />
+                        )}
+                        <line
+                          x1={mainBusPEX}
+                          y1={280}
+                          x2={mainBusPEX}
+                          y2={mainBusBottomY}
+                          stroke="#15803D"
+                          strokeWidth={2.4}
+                          strokeDasharray="6 3"
+                        />
+                        <rect
+                          x={44}
+                          y={287}
+                          width={72}
+                          height={16}
+                          rx={2}
+                          fill="#FFFFFF"
+                          stroke="#CBD5E1"
+                          strokeWidth={0.9}
+                        />
+                        <text
+                          x={mainBusL1X}
+                          y={299}
+                          textAnchor="middle"
+                          fill="#000000"
+                          fontSize={9.5}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          L1
+                        </text>
+                        {isThreePhase && (
+                          <>
+                            <text
+                              x={mainBusL2X}
+                              y={299}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={9.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              L2
+                            </text>
+                            <text
+                              x={mainBusL3X}
+                              y={299}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={9.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              L3
+                            </text>
+                          </>
+                        )}
+                        {project.networkSystem !== 'TN-C' && (
+                          <text
+                            x={mainBusNX}
+                            y={299}
+                            textAnchor="middle"
+                            fill="#0369A1"
+                            fontSize={9.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            N
+                          </text>
+                        )}
+                        <text
+                          x={mainBusPEX}
+                          y={299}
+                          textAnchor="middle"
+                          fill="#15803D"
+                          fontSize={9.5}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                        >
+                          {project.networkSystem === 'TN-C' ? 'PEN' : 'PE'}
+                        </text>
+                      </g>
+                    )}
+
+                    {/* ================================================================= */}
+                    {/* HORIZONTAL CIRCUIT BRANCHES STACKED ZHORA DOLE ACROSS A4 WIDTH    */}
+                    {/* ================================================================= */}
+                    {portraitSpineItems.map((item, itemIdx) => {
+                      const renderHorizontalCircuitRow = (
+                        c: CircuitConfig,
+                        cy: number,
+                        hasParentRcd: boolean,
+                        subBusX1L: number,
+                        subBusL1X: number,
+                        subBusL2X: number,
+                        subBusL3X: number,
+                        subBusNX: number
+                      ) => {
+                        const isThreePoleCircuit = c.poles === '3P' || c.poles === '4P';
+                        const isCircuitSelected =
+                          selectedElement?.type === 'circuit' && selectedElement.id === c.id;
+                        const mcbLeftX = 298;
+                        const mcbRightX = 366;
+                        const mcbMidX = 332;
+                        const cableEndX = 558;
+                        const loadEndX = 964;
+
+                        // Determine source X coordinate for phase and N
+                        const phaseTapX = hasParentRcd
+                          ? displayMode === 'single-line'
+                            ? subBusX1L
+                            : c.phase === 'L2' && isThreePhase
+                            ? subBusL2X
+                            : c.phase === 'L3' && isThreePhase
+                            ? subBusL3X
+                            : subBusL1X
+                          : displayMode === 'single-line'
+                          ? mainBus1LX
+                          : c.phase === 'L2' && isThreePhase
+                          ? mainBusL2X
+                          : c.phase === 'L3' && isThreePhase
+                          ? mainBusL3X
+                          : mainBusL1X;
+
+                        const nTapX = hasParentRcd
+                          ? displayMode === 'single-line'
+                            ? subBusX1L + 12
+                            : subBusNX
+                          : mainBusNX;
+
+                        return (
+                          <g
+                            key={`p-horiz-circ-${c.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedElement({ type: 'circuit', id: c.id });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            {/* 1. Feeder from Vertical Sub-Busbar / Main Busbar into Horizontal MCB */}
+                            {displayMode === 'single-line' || !isThreePoleCircuit ? (
+                              <>
+                                <line
+                                  x1={phaseTapX}
+                                  y1={cy}
+                                  x2={mcbLeftX}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={2.3}
+                                />
+                                <circle cx={phaseTapX} cy={cy} r={3.6} fill="#000000" />
+                              </>
+                            ) : (
+                              <>
+                                <line
+                                  x1={hasParentRcd ? subBusL1X : mainBusL1X}
+                                  y1={cy - 5}
+                                  x2={mcbLeftX}
+                                  y2={cy - 5}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                                <circle
+                                  cx={hasParentRcd ? subBusL1X : mainBusL1X}
+                                  cy={cy - 5}
+                                  r={3}
+                                  fill="#000000"
+                                />
+                                <line
+                                  x1={hasParentRcd ? subBusL2X : mainBusL2X}
+                                  y1={cy}
+                                  x2={mcbLeftX}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                                <circle
+                                  cx={hasParentRcd ? subBusL2X : mainBusL2X}
+                                  cy={cy}
+                                  r={3}
+                                  fill="#000000"
+                                />
+                                <line
+                                  x1={hasParentRcd ? subBusL3X : mainBusL3X}
+                                  y1={cy + 5}
+                                  x2={mcbLeftX}
+                                  y2={cy + 5}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                                <circle
+                                  cx={hasParentRcd ? subBusL3X : mainBusL3X}
+                                  cy={cy + 5}
+                                  r={3}
+                                  fill="#000000"
+                                />
+                              </>
+                            )}
+
+                            {/* 2. Horizontal MCB Box (68 × 34 at x = 298..366) */}
+                            <rect
+                              x={mcbLeftX}
+                              y={cy - 17}
+                              width={68}
+                              height={34}
+                              rx={4}
+                              fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
+                              stroke={isCircuitSelected ? '#0066FF' : '#000000'}
+                              strokeWidth={isCircuitSelected ? 3 : 2}
+                            />
+                            {displayMode !== 'single-line' && isThreePoleCircuit ? (
+                              [-5, 0, 5].map((yOff) => (
+                                <g key={`h-mcb-3p-${c.id}-${yOff}`}>
+                                  <line
+                                    x1={mcbLeftX}
+                                    y1={cy + yOff}
+                                    x2={mcbLeftX + 16}
+                                    y2={cy + yOff}
+                                    stroke="#000000"
+                                    strokeWidth={1.5}
+                                  />
+                                  <line
+                                    x1={mcbRightX - 16}
+                                    y1={cy + yOff}
+                                    x2={mcbRightX}
+                                    y2={cy + yOff}
+                                    stroke="#000000"
+                                    strokeWidth={1.5}
+                                  />
+                                  <line
+                                    x1={mcbRightX - 16}
+                                    y1={cy + yOff}
+                                    x2={mcbLeftX + 19}
+                                    y2={cy + yOff - 4.5}
+                                    stroke="#000000"
+                                    strokeWidth={1.8}
+                                  />
+                                </g>
+                              ))
+                            ) : (
+                              <>
+                                <line
+                                  x1={mcbLeftX}
+                                  y1={cy}
+                                  x2={mcbLeftX + 16}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={2}
+                                />
+                                <line
+                                  x1={mcbRightX - 16}
+                                  y1={cy}
+                                  x2={mcbRightX}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={2}
+                                />
+                                <line
+                                  x1={mcbRightX - 16}
+                                  y1={cy}
+                                  x2={mcbLeftX + 19}
+                                  y2={cy - 9}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                <line
+                                  x1={mcbLeftX + 13}
+                                  y1={cy - 3.5}
+                                  x2={mcbLeftX + 19}
+                                  y2={cy + 3.5}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                                <line
+                                  x1={mcbLeftX + 13}
+                                  y1={cy + 3.5}
+                                  x2={mcbLeftX + 19}
+                                  y2={cy - 3.5}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                              </>
+                            )}
+
+                            {/* Upright Breaker Labels Above & Below MCB Box */}
+                            <text
+                              x={mcbMidX}
+                              y={cy - 21}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={12.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {c.label} • {c.characteristic}
+                              {c.ratedCurrent}A ({c.poles})
+                            </text>
+                            <text
+                              x={mcbMidX}
+                              y={cy + 29}
+                              textAnchor="middle"
+                              fill="#0F172A"
+                              fontSize={11}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Fáza {c.phase === 'L1,L2,L3' ? '3F' : c.phase} • {c.breakingCapacity}
+                            </text>
+
+                            {/* 3. Horizontal Cable Section (x = 366..584) */}
+                            {displayMode === 'single-line' ? (
+                              <g>
+                                <line
+                                  x1={mcbRightX}
+                                  y1={cy}
+                                  x2={cableEndX}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={2.3}
+                                />
+                                <line
+                                  x1={mcbRightX + 14}
+                                  y1={cy + 6}
+                                  x2={mcbRightX + 24}
+                                  y2={cy - 6}
+                                  stroke="#000000"
+                                  strokeWidth={1.8}
+                                />
+                                <text
+                                  x={mcbRightX + 19}
+                                  y={cy - 9}
+                                  textAnchor="middle"
+                                  fill="#000000"
+                                  fontSize={11}
+                                  fontWeight="bold"
+                                  fontFamily="JetBrains Mono, monospace"
+                                >
+                                  {isThreePoleCircuit ? '5' : '3'}
+                                </text>
+                              </g>
+                            ) : (
+                              <g>
+                                {isThreePoleCircuit ? (
+                                  <>
+                                    <line
+                                      x1={mcbRightX}
+                                      y1={cy - 5}
+                                      x2={cableEndX}
+                                      y2={cy - 5}
+                                      stroke="#000000"
+                                      strokeWidth={1.6}
+                                    />
+                                    <line
+                                      x1={mcbRightX}
+                                      y1={cy}
+                                      x2={cableEndX}
+                                      y2={cy}
+                                      stroke="#000000"
+                                      strokeWidth={1.6}
+                                    />
+                                    <line
+                                      x1={mcbRightX}
+                                      y1={cy + 5}
+                                      x2={cableEndX}
+                                      y2={cy + 5}
+                                      stroke="#000000"
+                                      strokeWidth={1.6}
+                                    />
+                                  </>
+                                ) : (
+                                  <line
+                                    x1={mcbRightX}
+                                    y1={cy}
+                                    x2={cableEndX}
+                                    y2={cy}
+                                    stroke="#000000"
+                                    strokeWidth={2}
+                                  />
+                                )}
+                                {project.networkSystem !== 'TN-C' && (
+                                  <>
+                                    <line
+                                      x1={nTapX}
+                                      y1={cy + 9}
+                                      x2={cableEndX}
+                                      y2={cy + 9}
+                                      stroke="#0369A1"
+                                      strokeWidth={1.5}
+                                    />
+                                    <circle cx={nTapX} cy={cy + 9} r={2.6} fill="#0369A1" />
+                                  </>
+                                )}
+                                <line
+                                  x1={mainBusPEX}
+                                  y1={cy + 14}
+                                  x2={cableEndX}
+                                  y2={cy + 14}
+                                  stroke="#15803D"
+                                  strokeWidth={1.5}
+                                  strokeDasharray="4 2"
+                                />
+                                <circle cx={mainBusPEX} cy={cy + 14} r={2.6} fill="#15803D" />
+                              </g>
+                            )}
+
+                            {/* Horizontal Cable Tag Pill (x = 398..546, 148 × 36) */}
+                            <rect
+                              x={398}
+                              y={cy - 19}
+                              width={148}
+                              height={36}
+                              rx={4}
+                              fill="#FFFFFF"
+                              stroke="#64748B"
+                              strokeWidth={1.3}
+                            />
+                            <text
+                              x={472}
+                              y={cy - 4}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {c.cable}
+                            </text>
+                            <text
+                              x={472}
+                              y={cy + 11}
+                              textAnchor="middle"
+                              fill="#0369A1"
+                              fontSize={10.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Dĺžka: {c.cableLengthM || 15} m •{' '}
+                              {c.phase === 'L1,L2,L3' ? '400 V' : '230 V'}
+                            </text>
+
+                            {/* 4. Horizontal Circuit / Appliance Terminal Box (x = 558..964, 406 × 46) */}
+                            <rect
+                              x={cableEndX}
+                              y={cy - 23}
+                              width={loadEndX - cableEndX}
+                              height={46}
+                              rx={4}
+                              fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
+                              stroke={isCircuitSelected ? '#0066FF' : '#000000'}
+                              strokeWidth={isCircuitSelected ? 2.8 : 2}
+                            />
+                            <rect
+                              x={cableEndX}
+                              y={cy - 23}
+                              width={54}
+                              height={46}
+                              rx={4}
+                              fill="#F1F5F9"
+                              stroke="#000000"
+                              strokeWidth={1.4}
+                            />
+                            <text
+                              x={cableEndX + 27}
+                              y={cy - 4}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={13}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {c.label}
+                            </text>
+                            <text
+                              x={cableEndX + 27}
+                              y={cy + 14}
+                              textAnchor="middle"
+                              fill="#0369A1"
+                              fontSize={11}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {c.phase === 'L1,L2,L3' ? '3F' : c.phase}
+                            </text>
+
+                            <text
+                              x={cableEndX + 64}
+                              y={cy - 4}
+                              fill="#000000"
+                              fontSize={13.5}
+                              fontWeight="bold"
+                              fontFamily="Plus Jakarta Sans, sans-serif"
+                            >
+                              {c.name.length > 38 ? `${c.name.slice(0, 37)}…` : c.name}
+                            </text>
+                            <text
+                              x={cableEndX + 64}
+                              y={cy + 14}
+                              fill="#1E293B"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {c.category} • Istič {c.characteristic}
+                              {c.ratedCurrent}A ({c.poles})
+                            </text>
+                            <text
+                              x={loadEndX - 12}
+                              y={cy + 14}
+                              textAnchor="end"
+                              fill="#0369A1"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              P = {c.powerKw.toFixed(2)} kW
+                            </text>
+                          </g>
+                        );
+                      };
+
+                      // CASE A: RCD GROUP WITH CHILD CIRCUITS
+                      if (item.kind === 'rcd-group' && item.rcd) {
+                        const rcd = item.rcd;
+                        const isRcdSelected =
+                          selectedElement?.type === 'rcd' && selectedElement.id === rcd.id;
+                        const firstCy =
+                          item.topY + portraitGroupHeaderH + portraitCircuitRowH / 2;
+                        const lastCy =
+                          item.topY +
+                          portraitGroupHeaderH +
+                          (item.circuits.length - 1) * portraitCircuitRowH +
+                          portraitCircuitRowH / 2;
+
+                        const rcdLeftX = 136;
+                        const rcdRightX = 206;
+                        const rcdMidX = 171;
+                        const subBusX1L = 240;
+                        const subBusL1X = 232;
+                        const subBusL2X = 242;
+                        const subBusL3X = 252;
+                        const subBusNX = 262;
+
+                        return (
+                          <g key={`p-spine-rcd-${rcd.id}-${itemIdx}`}>
+                            {/* Group Header Bar across width */}
+                            <rect
+                              x={132}
+                              y={item.topY}
+                              width={832}
+                              height={22}
+                              rx={3}
+                              fill="#F8FAFC"
+                              stroke="#CBD5E1"
+                              strokeWidth={1.1}
+                            />
+                            <text
+                              x={142}
+                              y={item.topY + 15}
+                              fill="#0F172A"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              SKUPINA {rcd.label} — {rcd.deviceKind} {rcd.poles} •{' '}
+                              {rcd.ratedCurrent}A / {rcd.sensitivity}mA (Typ {rcd.type}) •{' '}
+                              {rcd.manufacturer}
+                            </text>
+                            <text
+                              x={954}
+                              y={item.topY + 15}
+                              textAnchor="end"
+                              fill="#0369A1"
+                              fontSize={11}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Nulová svorkovnica N({rcd.label})
+                            </text>
+
+                            {/* Horizontal Tap from Vertical Main Busbar into RCD Symbol */}
+                            <g
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedElement({ type: 'rcd', id: rcd.id });
+                              }}
+                              className="cursor-pointer"
+                            >
+                              {displayMode === 'single-line' ? (
+                                <>
+                                  <line
+                                    x1={mainBus1LX}
+                                    y1={firstCy}
+                                    x2={rcdLeftX}
+                                    y2={firstCy}
+                                    stroke="#000000"
+                                    strokeWidth={2.6}
+                                  />
+                                  <circle cx={mainBus1LX} cy={firstCy} r={4} fill="#000000" />
+                                  <line
+                                    x1={rcdRightX}
+                                    y1={firstCy}
+                                    x2={subBusX1L}
+                                    y2={firstCy}
+                                    stroke="#000000"
+                                    strokeWidth={2.6}
+                                  />
+                                  <circle cx={subBusX1L} cy={firstCy} r={3.6} fill="#000000" />
+                                </>
+                              ) : (
+                                <>
+                                  <line
+                                    x1={mainBusL1X}
+                                    y1={firstCy - 5}
+                                    x2={rcdLeftX}
+                                    y2={firstCy - 5}
+                                    stroke="#000000"
+                                    strokeWidth={1.8}
+                                  />
+                                  <circle cx={mainBusL1X} cy={firstCy - 5} r={3} fill="#000000" />
+                                  <line
+                                    x1={rcdRightX}
+                                    y1={firstCy - 5}
+                                    x2={subBusL1X}
+                                    y2={firstCy - 5}
+                                    stroke="#000000"
+                                    strokeWidth={1.8}
+                                  />
+                                  {rcd.poles === '4P' && isThreePhase && (
+                                    <>
+                                      <line
+                                        x1={mainBusL2X}
+                                        y1={firstCy}
+                                        x2={rcdLeftX}
+                                        y2={firstCy}
+                                        stroke="#000000"
+                                        strokeWidth={1.8}
+                                      />
+                                      <circle cx={mainBusL2X} cy={firstCy} r={3} fill="#000000" />
+                                      <line
+                                        x1={rcdRightX}
+                                        y1={firstCy}
+                                        x2={subBusL2X}
+                                        y2={firstCy}
+                                        stroke="#000000"
+                                        strokeWidth={1.8}
+                                      />
+                                      <line
+                                        x1={mainBusL3X}
+                                        y1={firstCy + 5}
+                                        x2={rcdLeftX}
+                                        y2={firstCy + 5}
+                                        stroke="#000000"
+                                        strokeWidth={1.8}
+                                      />
+                                      <circle
+                                        cx={mainBusL3X}
+                                        cy={firstCy + 5}
+                                        r={3}
+                                        fill="#000000"
+                                      />
+                                      <line
+                                        x1={rcdRightX}
+                                        y1={firstCy + 5}
+                                        x2={subBusL3X}
+                                        y2={firstCy + 5}
+                                        stroke="#000000"
+                                        strokeWidth={1.8}
+                                      />
+                                    </>
+                                  )}
+                                  {project.networkSystem !== 'TN-C' && (
+                                    <>
+                                      <line
+                                        x1={mainBusNX}
+                                        y1={firstCy + 10}
+                                        x2={subBusNX}
+                                        y2={firstCy + 10}
+                                        stroke="#0369A1"
+                                        strokeWidth={1.8}
+                                      />
+                                      <circle cx={mainBusNX} cy={firstCy + 10} r={3} fill="#0369A1" />
+                                    </>
+                                  )}
+                                </>
+                              )}
+
+                              {/* Horizontal RCD Box (70 × 38 at x = 136..206) */}
+                              <rect
+                                x={rcdLeftX}
+                                y={firstCy - 19}
+                                width={70}
+                                height={38}
+                                rx={4}
+                                fill={isRcdSelected ? '#EFF6FF' : '#FFFFFF'}
+                                stroke={isRcdSelected ? '#0066FF' : '#000000'}
+                                strokeWidth={isRcdSelected ? 3 : 2.1}
+                              />
+                              <ellipse
+                                cx={rcdLeftX + 44}
+                                cy={firstCy}
+                                rx={5.5}
+                                ry={11}
+                                fill="none"
+                                stroke="#000000"
+                                strokeWidth={1.7}
+                              />
+                              <line
+                                x1={rcdLeftX}
+                                y1={firstCy}
+                                x2={rcdLeftX + 16}
+                                y2={firstCy}
+                                stroke="#000000"
+                                strokeWidth={1.9}
+                              />
+                              <line
+                                x1={rcdLeftX + 50}
+                                y1={firstCy}
+                                x2={rcdRightX}
+                                y2={firstCy}
+                                stroke="#000000"
+                                strokeWidth={1.9}
+                              />
+                              <line
+                                x1={rcdLeftX + 50}
+                                y1={firstCy}
+                                x2={rcdLeftX + 19}
+                                y2={firstCy - 8}
+                                stroke="#000000"
+                                strokeWidth={2.1}
+                              />
+                              <rect
+                                x={rcdLeftX + 6}
+                                y={firstCy - 15}
+                                width={12}
+                                height={9}
+                                rx={1.5}
+                                fill="#F8FAFC"
+                                stroke="#000000"
+                                strokeWidth={1.1}
+                              />
+                              <text
+                                x={rcdLeftX + 12}
+                                y={firstCy - 8}
+                                textAnchor="middle"
+                                fill="#000000"
+                                fontSize={7.5}
+                                fontWeight="bold"
+                                fontFamily="JetBrains Mono, monospace"
+                              >
+                                T
+                              </text>
+
+                              {/* Upright RCD Labels */}
+                              <text
+                                x={rcdMidX}
+                                y={firstCy - 23}
+                                textAnchor="middle"
+                                fill="#000000"
+                                fontSize={12}
+                                fontWeight="bold"
+                                fontFamily="JetBrains Mono, monospace"
+                              >
+                                {rcd.label} ({rcd.poles})
+                              </text>
+                              <text
+                                x={rcdMidX}
+                                y={firstCy + 31}
+                                textAnchor="middle"
+                                fill="#0F172A"
+                                fontSize={10.5}
+                                fontWeight="bold"
+                                fontFamily="JetBrains Mono, monospace"
+                              >
+                                {rcd.ratedCurrent}A/{rcd.sensitivity}mA Typ {rcd.type}
+                              </text>
+                            </g>
+
+                            {/* Vertical RCD Sub-Busbar connecting all circuits in this group */}
+                            {displayMode === 'single-line' ? (
+                              <>
+                                <line
+                                  x1={subBusX1L}
+                                  y1={firstCy}
+                                  x2={subBusX1L}
+                                  y2={lastCy}
+                                  stroke="#000000"
+                                  strokeWidth={3}
+                                />
+                                <line
+                                  x1={subBusX1L + 12}
+                                  y1={firstCy}
+                                  x2={subBusX1L + 12}
+                                  y2={lastCy}
+                                  stroke="#0369A1"
+                                  strokeWidth={2}
+                                  strokeDasharray="4 2"
+                                />
+                                <text
+                                  x={subBusX1L + 6}
+                                  y={firstCy - 10}
+                                  textAnchor="middle"
+                                  fill="#0369A1"
+                                  fontSize={10}
+                                  fontWeight="bold"
+                                  fontFamily="JetBrains Mono, monospace"
+                                >
+                                  N({rcd.label})
+                                </text>
+                              </>
+                            ) : (
+                              <>
+                                <line
+                                  x1={subBusL1X}
+                                  y1={firstCy - 5}
+                                  x2={subBusL1X}
+                                  y2={lastCy + 5}
+                                  stroke="#000000"
+                                  strokeWidth={2.2}
+                                />
+                                {rcd.poles === '4P' && isThreePhase && (
+                                  <>
+                                    <line
+                                      x1={subBusL2X}
+                                      y1={firstCy}
+                                      x2={subBusL2X}
+                                      y2={lastCy + 5}
+                                      stroke="#000000"
+                                      strokeWidth={2}
+                                    />
+                                    <line
+                                      x1={subBusL3X}
+                                      y1={firstCy + 5}
+                                      x2={subBusL3X}
+                                      y2={lastCy + 5}
+                                      stroke="#000000"
+                                      strokeWidth={2}
+                                    />
+                                  </>
+                                )}
+                                <line
+                                  x1={subBusNX}
+                                  y1={firstCy + 10}
+                                  x2={subBusNX}
+                                  y2={lastCy + 10}
+                                  stroke="#0369A1"
+                                  strokeWidth={2}
+                                />
+                              </>
+                            )}
+
+                            {/* Render each horizontal circuit row in this RCD group */}
+                            {item.circuits.map((c, cIdx) => {
+                              const cy =
+                                item.topY +
+                                portraitGroupHeaderH +
+                                cIdx * portraitCircuitRowH +
+                                portraitCircuitRowH / 2;
+                              return renderHorizontalCircuitRow(
+                                c,
+                                cy,
+                                true,
+                                subBusX1L,
+                                subBusL1X,
+                                subBusL2X,
+                                subBusL3X,
+                                subBusNX
+                              );
+                            })}
+                          </g>
+                        );
+                      }
+
+                      // CASE B: RESERVE RCD WITHOUT CIRCUITS (e.g. FI2 in TEST 1)
+                      if (item.kind === 'rcd-empty' && item.rcd) {
+                        const rcd = item.rcd;
+                        const cy = item.topY + item.height / 2;
+                        const isRcdSelected =
+                          selectedElement?.type === 'rcd' && selectedElement.id === rcd.id;
+                        const rcdLeftX = 136;
+                        const rcdRightX = 206;
+
+                        return (
+                          <g
+                            key={`p-spine-empty-rcd-${rcd.id}-${itemIdx}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedElement({ type: 'rcd', id: rcd.id });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <line
+                              x1={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                              y1={cy}
+                              x2={rcdLeftX}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={2.4}
+                            />
+                            <circle
+                              cx={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                              cy={cy}
+                              r={3.8}
+                              fill="#000000"
+                            />
+                            <rect
+                              x={rcdLeftX}
+                              y={cy - 19}
+                              width={70}
+                              height={38}
+                              rx={4}
+                              fill={isRcdSelected ? '#EFF6FF' : '#FFFFFF'}
+                              stroke={isRcdSelected ? '#0066FF' : '#000000'}
+                              strokeWidth={isRcdSelected ? 3 : 2.1}
+                            />
+                            <ellipse
+                              cx={rcdLeftX + 44}
+                              cy={cy}
+                              rx={5.5}
+                              ry={11}
+                              fill="none"
+                              stroke="#000000"
+                              strokeWidth={1.7}
+                            />
+                            <line
+                              x1={rcdLeftX}
+                              y1={cy}
+                              x2={rcdLeftX + 16}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={1.9}
+                            />
+                            <line
+                              x1={rcdLeftX + 50}
+                              y1={cy}
+                              x2={rcdRightX}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={1.9}
+                            />
+                            <line
+                              x1={rcdLeftX + 50}
+                              y1={cy}
+                              x2={rcdLeftX + 19}
+                              y2={cy - 8}
+                              stroke="#000000"
+                              strokeWidth={2.1}
+                            />
+                            <text
+                              x={171}
+                              y={cy - 23}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={12}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcd.label} ({rcd.poles})
+                            </text>
+                            <line
+                              x1={rcdRightX}
+                              y1={cy}
+                              x2={298}
+                              y2={cy}
+                              stroke="#475569"
+                              strokeWidth={2}
+                              strokeDasharray="5 3"
+                            />
+                            <rect
+                              x={298}
+                              y={cy - 20}
+                              width={666}
+                              height={40}
+                              rx={4}
+                              fill="#F8FAFC"
+                              stroke="#64748B"
+                              strokeWidth={1.6}
+                              strokeDasharray="6 3"
+                            />
+                            <text
+                              x={314}
+                              y={cy + 5}
+                              fill="#334155"
+                              fontSize={12.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcd.label} — {rcd.deviceKind} {rcd.poles} {rcd.ratedCurrent}A /{' '}
+                              {rcd.sensitivity}mA (Typ {rcd.type}) • Rezerva FI (neobsadený vývod)
+                            </text>
+                          </g>
+                        );
+                      }
+
+                      // CASE C: STANDALONE RCBO (e.g. FI3 in TEST 3)
+                      if (item.kind === 'rcbo-standalone' && item.rcd) {
+                        const rcbo = item.rcd;
+                        const cy = item.topY + item.height / 2;
+                        const isRcboSelected =
+                          selectedElement?.type === 'rcd' && selectedElement.id === rcbo.id;
+                        const rcboName = rcbo.circuitName || `Samostatný okruh ${rcbo.label}`;
+                        const rcboCable =
+                          rcbo.cableType ||
+                          (rcbo.poles === '4P' ? 'CYKY-J 5x2,5 mm²' : 'CYKY-J 3x2,5 mm²');
+                        const rcboPower = rcbo.powerKw ?? 2.2;
+                        const rcboPhase =
+                          rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1');
+                        const mcbLeftX = 298;
+                        const mcbRightX = 366;
+                        const cableEndX = 558;
+                        const loadEndX = 964;
+
+                        return (
+                          <g
+                            key={`p-spine-rcbo-${rcbo.id}-${itemIdx}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedElement({ type: 'rcd', id: rcbo.id });
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <line
+                              x1={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                              y1={cy}
+                              x2={mcbLeftX}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={2.4}
+                            />
+                            <circle
+                              cx={displayMode === 'single-line' ? mainBus1LX : mainBusL1X}
+                              cy={cy}
+                              r={3.8}
+                              fill="#000000"
+                            />
+                            <rect
+                              x={mcbLeftX}
+                              y={cy - 18}
+                              width={68}
+                              height={36}
+                              rx={4}
+                              fill={isRcboSelected ? '#EFF6FF' : '#FFFFFF'}
+                              stroke={isRcboSelected ? '#0066FF' : '#000000'}
+                              strokeWidth={isRcboSelected ? 3 : 2.1}
+                            />
+                            <ellipse
+                              cx={mcbLeftX + 44}
+                              cy={cy}
+                              rx={5}
+                              ry={10}
+                              fill="none"
+                              stroke="#000000"
+                              strokeWidth={1.6}
+                            />
+                            <line
+                              x1={mcbLeftX}
+                              y1={cy}
+                              x2={mcbLeftX + 16}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={1.9}
+                            />
+                            <line
+                              x1={mcbLeftX + 49}
+                              y1={cy}
+                              x2={mcbRightX}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={1.9}
+                            />
+                            <line
+                              x1={mcbLeftX + 49}
+                              y1={cy}
+                              x2={mcbLeftX + 18}
+                              y2={cy - 8}
+                              stroke="#000000"
+                              strokeWidth={2.1}
+                            />
+                            <text
+                              x={332}
+                              y={cy - 22}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={12.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcbo.label} • RCBO {rcbo.characteristic || 'B'}
+                              {rcbo.ratedCurrent}A
+                            </text>
+                            <text
+                              x={332}
+                              y={cy + 30}
+                              textAnchor="middle"
+                              fill="#0F172A"
+                              fontSize={10.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcbo.sensitivity}mA Typ {rcbo.type} ({rcbo.poles})
+                            </text>
+
+                            <line
+                              x1={mcbRightX}
+                              y1={cy}
+                              x2={cableEndX}
+                              y2={cy}
+                              stroke="#000000"
+                              strokeWidth={2.3}
+                            />
+                            <rect
+                              x={398}
+                              y={cy - 19}
+                              width={148}
+                              height={36}
+                              rx={4}
+                              fill="#FFFFFF"
+                              stroke="#64748B"
+                              strokeWidth={1.3}
+                            />
+                            <text
+                              x={472}
+                              y={cy - 4}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcboCable}
+                            </text>
+                            <text
+                              x={472}
+                              y={cy + 11}
+                              textAnchor="middle"
+                              fill="#0369A1"
+                              fontSize={10.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Dĺžka: {rcbo.cableLengthM || 15} m • Fáza {rcboPhase}
+                            </text>
+
+                            <rect
+                              x={cableEndX}
+                              y={cy - 23}
+                              width={loadEndX - cableEndX}
+                              height={46}
+                              rx={4}
+                              fill={isRcboSelected ? '#EFF6FF' : '#FFFFFF'}
+                              stroke={isRcboSelected ? '#0066FF' : '#000000'}
+                              strokeWidth={2}
+                            />
+                            <rect
+                              x={cableEndX}
+                              y={cy - 23}
+                              width={54}
+                              height={46}
+                              rx={4}
+                              fill="#F1F5F9"
+                              stroke="#000000"
+                              strokeWidth={1.4}
+                            />
+                            <text
+                              x={cableEndX + 27}
+                              y={cy - 4}
+                              textAnchor="middle"
+                              fill="#000000"
+                              fontSize={13}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              {rcbo.label}
+                            </text>
+                            <text
+                              x={cableEndX + 27}
+                              y={cy + 14}
+                              textAnchor="middle"
+                              fill="#0369A1"
+                              fontSize={11}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              RCBO
+                            </text>
+                            <text
+                              x={cableEndX + 64}
+                              y={cy - 4}
+                              fill="#000000"
+                              fontSize={13.5}
+                              fontWeight="bold"
+                              fontFamily="Plus Jakarta Sans, sans-serif"
+                            >
+                              {rcboName.length > 36 ? `${rcboName.slice(0, 35)}…` : rcboName}
+                            </text>
+                            <text
+                              x={cableEndX + 64}
+                              y={cy + 14}
+                              fill="#1E293B"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              Ističochránič {rcbo.characteristic || 'B'}
+                              {rcbo.ratedCurrent}A/{rcbo.sensitivity}mA ({rcbo.poles})
+                            </text>
+                            <text
+                              x={loadEndX - 12}
+                              y={cy + 14}
+                              textAnchor="end"
+                              fill="#0369A1"
+                              fontSize={11.5}
+                              fontWeight="bold"
+                              fontFamily="JetBrains Mono, monospace"
+                            >
+                              P = {rcboPower.toFixed(2)} kW
+                            </text>
+                          </g>
+                        );
+                      }
+
+                      // CASE D: DIRECT CIRCUITS WITHOUT RCD
+                      return (
+                        <g key={`p-spine-direct-${itemIdx}`}>
+                          <rect
+                            x={132}
+                            y={item.topY}
+                            width={832}
+                            height={22}
+                            rx={3}
+                            fill="#F8FAFC"
+                            stroke="#CBD5E1"
+                            strokeWidth={1.1}
+                          />
+                          <text
+                            x={142}
+                            y={item.topY + 15}
+                            fill="#0F172A"
+                            fontSize={11.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                          >
+                            PRIAME VÝVODY BEZ PRÚDOVÉHO CHRÁNIČA (NAPOJENÉ PRIAMO NA HL. ZBERNICU)
+                          </text>
+                          {item.circuits.map((c, cIdx) => {
+                            const cy =
+                              item.topY +
+                              portraitGroupHeaderH +
+                              cIdx * portraitCircuitRowH +
+                              portraitCircuitRowH / 2;
+                            return renderHorizontalCircuitRow(
+                              c,
+                              cy,
+                              false,
+                              mainBus1LX,
+                              mainBusL1X,
+                              mainBusL2X,
+                              mainBusL3X,
+                              mainBusNX
+                            );
+                          })}
+                        </g>
+                      );
+                    })}
+
+                    {/* Bottom Full-Width STN Title Block in Portrait Mode */}
+                    <g transform={`translate(28, ${canvasHeight - 98})`}>
                       <rect
-                        x={-28}
-                        y={84}
-                        width={56}
-                        height={38}
-                        rx={4}
+                        x={0}
+                        y={0}
+                        width={944}
+                        height={74}
                         fill="#FFFFFF"
                         stroke="#000000"
                         strokeWidth={2}
-                        strokeDasharray="4 2"
                       />
-                      <circle cx={0} cy={103} r={13} fill="#F8FAFC" stroke="#000000" strokeWidth={1.6} />
+                      <line x1={0} y1={25} x2={944} y2={25} stroke="#000000" strokeWidth={1.3} />
+                      <line x1={0} y1={49} x2={944} y2={49} stroke="#000000" strokeWidth={1.3} />
+                      <line x1={610} y1={0} x2={610} y2={74} stroke="#000000" strokeWidth={1.3} />
+
                       <text
-                        x={0}
-                        y={107}
-                        textAnchor="middle"
+                        x={12}
+                        y={17}
                         fill="#000000"
-                        fontSize={10.5}
+                        fontSize={12.5}
                         fontWeight="bold"
-                        fontFamily="JetBrains Mono, monospace"
+                        fontFamily="Inter, Plus Jakarta Sans, sans-serif"
                       >
-                        kWh
+                        NÁZOV:{' '}
+                        {project.name.length > 52 ? `${project.name.slice(0, 52)}…` : project.name}
                       </text>
                       <text
-                        x={44}
-                        y={99}
+                        x={624}
+                        y={17}
                         fill="#000000"
                         fontSize={12.5}
                         fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
                       >
-                        ELEKTROMER ({electricityMeter.type})
+                        SÚSTAVA: {project.networkSystem} ({project.voltage})
+                      </text>
+
+                      <text
+                        x={12}
+                        y={42}
+                        fill="#0F172A"
+                        fontSize={12}
+                        fontWeight="bold"
+                        fontFamily="Inter, Plus Jakarta Sans, sans-serif"
+                      >
+                        Vypracoval:{' '}
+                        {(project.designerName || 'Projekčná kancelária').length > 48
+                          ? `${(project.designerName || 'Projekčná kancelária').slice(0, 48)}…`
+                          : project.designerName || 'Projekčná kancelária'}
                       </text>
                       <text
-                        x={44}
-                        y={116}
+                        x={624}
+                        y={42}
+                        fill="#0F172A"
+                        fontSize={12}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                      >
+                        Dátum: {project.projectDate}
+                      </text>
+
+                      <text
+                        x={12}
+                        y={66}
                         fill="#1E293B"
                         fontSize={11.5}
                         fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
                       >
-                        {electricityMeter.location} • {electricityMeter.tariff}
+                        Norma: STN EN 61439-3 / STN 33 2000-4-41 • A4 na výšku (zhora dole)
+                      </text>
+                      <text
+                        x={624}
+                        y={66}
+                        fill="#000000"
+                        fontSize={12.5}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                      >
+                        Č. zákazky: {project.projectNumber}
                       </text>
                     </g>
-                  ) : (
-                    <line x1={0} y1={84} x2={0} y2={122} stroke="#000000" strokeWidth={2.4} />
-                  )}
-
-                  {/* Step 4: PRÍVOD DO ROZVÁDZAČA */}
-                  <line x1={0} y1={122} x2={0} y2={148} stroke="#000000" strokeWidth={2.8} />
-                  <line x1={-7} y1={131} x2={7} y2={137} stroke="#000000" strokeWidth={1.8} />
-                  <text
-                    x={16}
-                    y={140}
-                    fill="#000000"
-                    fontSize={12}
-                    fontWeight="bold"
-                    fontFamily="JetBrains Mono, monospace"
-                  >
-                    PRÍVOD DO ROZVÁDZAČA ({project.supplyCable})
-                  </text>
-
-                  {/* Step 5: HLAVNÝ VYPÍNAČ / ISTIČ V ROZVÁDZAČI (QS1 / QF1) */}
-                  <g
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedElement({ type: 'internal-main' });
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <rect
-                      x={-34}
-                      y={148}
-                      width={68}
-                      height={54}
-                      rx={4}
-                      fill={selectedElement?.type === 'internal-main' ? '#EFF6FF' : '#FFFFFF'}
-                      stroke={selectedElement?.type === 'internal-main' ? '#0066FF' : '#000000'}
-                      strokeWidth={selectedElement?.type === 'internal-main' ? 3 : 2.2}
-                    />
-                    {internalDevice.enabled ? (
-                      <>
-                        <line x1={0} y1={148} x2={0} y2={161} stroke="#000000" strokeWidth={2.2} />
-                        <line x1={0} y1={189} x2={0} y2={202} stroke="#000000" strokeWidth={2.2} />
-                        <line x1={0} y1={189} x2={-11} y2={164} stroke="#000000" strokeWidth={2.4} />
-                        {isInternalBreaker ? (
-                          <>
-                            <line x1={-5} y1={159} x2={5} y2={165} stroke="#000000" strokeWidth={1.8} />
-                            <line x1={-5} y1={165} x2={5} y2={159} stroke="#000000" strokeWidth={1.8} />
-                          </>
-                        ) : (
-                          <>
-                            <line x1={-6} y1={161} x2={6} y2={161} stroke="#000000" strokeWidth={2.2} />
-                            <circle cx={0} cy={189} r={2.6} fill="#000000" />
-                          </>
-                        )}
-                        <text
-                          x={44}
-                          y={166}
-                          fill="#000000"
-                          fontSize={13}
-                          fontWeight="bold"
-                          fontFamily="JetBrains Mono, monospace"
-                        >
-                          {internalDevice.designation} – {internalDevice.deviceType.toUpperCase()} V ROZVÁDZAČI
-                        </text>
-                        <text
-                          x={44}
-                          y={184}
-                          fill="#0F172A"
-                          fontSize={12.5}
-                          fontWeight="bold"
-                          fontFamily="JetBrains Mono, monospace"
-                        >
-                          {internalDevice.poles}{' '}
-                          {isInternalBreaker
-                            ? `${internalDevice.characteristic || 'B'}${internalDevice.ratedCurrent}A (${internalDevice.breakingCapacity || '10 kA'})`
-                            : `In = ${internalDevice.ratedCurrent}A (bez nadprúd. ochrany)`}{' '}
-                          • {internalDevice.manufacturer}
-                        </text>
-                        <text
-                          x={44}
-                          y={200}
-                          fill="#334155"
-                          fontSize={11.5}
-                          fontWeight="bold"
-                          fontFamily="Plus Jakarta Sans, sans-serif"
-                        >
-                          {internalDevice.modules} mod. •{' '}
-                          {internalDevice.topologyPosition === 'ZA_SPD_PRED_RCD'
-                            ? 'Za SPD, pred chráničmi FI'
-                            : 'Na vstupe rozvádzača (pred SPD a FI)'}
-                        </text>
-                      </>
-                    ) : (
-                      <>
-                        <line x1={0} y1={148} x2={0} y2={202} stroke="#000000" strokeWidth={2.4} />
-                        <text
-                          x={44}
-                          y={178}
-                          fill="#334155"
-                          fontSize={12}
-                          fontWeight="bold"
-                          fontFamily="JetBrains Mono, monospace"
-                        >
-                          Priame napojenie zberníc (bez hl. prvku v rozvádzači)
-                        </text>
-                      </>
-                    )}
-                  </g>
-
-                  {/* Wire down to Main Busbar L1 at Y = 330 (relative y = 246) */}
-                  <line x1={0} y1={202} x2={0} y2={246} stroke="#000000" strokeWidth={3} />
-                  <circle cx={0} cy={246} r={4.5} fill="#000000" />
-                </g>
-
-                {/* Right-Top Box: PEN Split Point */}
-                {(project.networkSystem === 'TN-C-S' || displayMode === 'wiring-diagram') && (
-                  <g transform="translate(650, 84)">
-                    <rect
-                      x={0}
-                      y={0}
-                      width={280}
-                      height={66}
-                      rx={5}
-                      fill="#F0FDF4"
-                      stroke="#15803D"
-                      strokeWidth={2}
-                    />
-                    <text
-                      x={140}
-                      y={21}
-                      textAnchor="middle"
-                      fill="#15803D"
-                      fontSize={12}
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      {project.networkSystem === 'TN-C-S' ? 'BOD ROZDELENIA PEN → PE + N' : `UZOL PE / N (${project.networkSystem})`}
-                    </text>
-                    <text
-                      x={140}
-                      y={40}
-                      textAnchor="middle"
-                      fill="#000000"
-                      fontSize={12}
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      Ochranná svorkovnica PE + N
-                    </text>
-                    <text
-                      x={140}
-                      y={57}
-                      textAnchor="middle"
-                      fill="#0369A1"
-                      fontSize={11.5}
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      HOP (MET) ≤ 10 Ω
-                    </text>
-                  </g>
-                )}
-
-                {/* Right-Top Surge Protector (SPD - FV1) */}
-                {mainBreaker.hasSurgeProtector && (
-                  <g
-                    transform="translate(682, 200)"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedElement({ type: 'spd' });
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <line x1={0} y1={48} x2={0} y2={130} stroke="#000000" strokeWidth={2.2} />
-                    <circle cx={0} cy={130} r={4} fill="#000000" />
-                    <rect
-                      x={-26}
-                      y={8}
-                      width={52}
-                      height={40}
-                      rx={4}
-                      fill="#FFFFFF"
-                      stroke="#000000"
-                      strokeWidth={2}
-                    />
-                    <polygon points="-6,21 6,21 0,34" fill="#000000" />
-                    <line x1={-8} y1={34} x2={8} y2={34} stroke="#000000" strokeWidth={1.8} />
-                    <text
-                      x={34}
-                      y={22}
-                      fill="#000000"
-                      fontSize={12.5}
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      FV1 – PREPÄŤOVÁ OCHRANA
-                    </text>
-                    <text
-                      x={34}
-                      y={38}
-                      fill="#0F172A"
-                      fontSize={12}
-                      fontWeight="bold"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      {mainBreaker.surgeProtectorType} ({mainBreaker.manufacturer})
-                    </text>
-                    {/* Green PE symbol */}
-                    <line x1={0} y1={8} x2={0} y2={-6} stroke="#15803D" strokeWidth={2} />
-                    <line x1={-10} y1={-6} x2={10} y2={-6} stroke="#15803D" strokeWidth={2} />
-                    <line x1={-6} y1={-11} x2={6} y2={-11} stroke="#15803D" strokeWidth={2} />
-                    <line x1={-3} y1={-16} x2={3} y2={-16} stroke="#15803D" strokeWidth={2} />
-                  </g>
-                )}
-
-                {/* Main Top Horizontal Busbars */}
-                {(() => {
-                  const pBusL1 = 330;
-                  const pBusL2 = 348;
-                  const pBusL3 = 366;
-                  const pBusN = 386;
-                  const pBusPE = 406;
-                  const lastRowTopBusY =
-                    portraitRowsStartY + (portraitRows.length - 1) * portraitRowHeight + 22;
-
-                  return (
-                    <g>
-                      {displayMode === 'single-line' ? (
-                        <>
-                          <line x1={62} y1={pBusL1} x2={930} y2={pBusL1} stroke="#000000" strokeWidth={3.5} />
-                          <text
-                            x={26}
-                            y={pBusL1 - 9}
-                            fill="#000000"
-                            fontSize={13}
-                            fontWeight="bold"
-                            fontFamily="JetBrains Mono, monospace"
-                          >
-                            {isThreePhase ? '3L+N+PE' : 'L+N+PE'}
-                          </text>
-                          {/* Vertical Main Trunk feeding every row on the left */}
-                          <line
-                            x1={62}
-                            y1={pBusL1}
-                            x2={62}
-                            y2={lastRowTopBusY}
-                            stroke="#000000"
-                            strokeWidth={3.5}
-                          />
-                          <circle cx={62} cy={pBusL1} r={4.5} fill="#000000" />
-                        </>
-                      ) : (
-                        <>
-                          <line x1={42} y1={pBusL1} x2={930} y2={pBusL1} stroke="#000000" strokeWidth={2.4} />
-                          <text x={24} y={pBusL1 + 4} fill="#000000" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">L1</text>
-                          <line x1={42} y1={pBusL1} x2={42} y2={lastRowTopBusY} stroke="#000000" strokeWidth={2.2} />
-
-                          {isThreePhase && (
-                            <>
-                              <line x1={52} y1={pBusL2} x2={930} y2={pBusL2} stroke="#000000" strokeWidth={2.4} />
-                              <text x={24} y={pBusL2 + 4} fill="#000000" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">L2</text>
-                              <line x1={52} y1={pBusL2} x2={52} y2={lastRowTopBusY + 12} stroke="#000000" strokeWidth={2.2} />
-
-                              <line x1={62} y1={pBusL3} x2={930} y2={pBusL3} stroke="#000000" strokeWidth={2.4} />
-                              <text x={24} y={pBusL3 + 4} fill="#000000" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">L3</text>
-                              <line x1={62} y1={pBusL3} x2={62} y2={lastRowTopBusY + 24} stroke="#000000" strokeWidth={2.2} />
-                            </>
-                          )}
-
-                          {project.networkSystem !== 'TN-C' && (
-                            <>
-                              <line x1={74} y1={pBusN} x2={930} y2={pBusN} stroke="#0369A1" strokeWidth={2.6} />
-                              <text x={24} y={pBusN + 4} fill="#0369A1" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">N</text>
-                              <line x1={74} y1={pBusN} x2={74} y2={lastRowTopBusY + 36} stroke="#0369A1" strokeWidth={2.4} />
-                            </>
-                          )}
-
-                          <line x1={86} y1={pBusPE} x2={930} y2={pBusPE} stroke="#15803D" strokeWidth={2.6} strokeDasharray="6 3" />
-                          <text x={24} y={pBusPE + 4} fill="#15803D" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">PE</text>
-                          <line x1={86} y1={pBusPE} x2={86} y2={lastRowTopBusY + 48} stroke="#15803D" strokeWidth={2.4} strokeDasharray="6 3" />
-                        </>
-                      )}
-
-                      {/* Render each Portrait Row (up to 4 columns per row) */}
-                      {portraitRows.map((rowCols, rowIdx) => {
-                        if (rowCols.length === 0) return null;
-
-                        const rowTop = portraitRowsStartY + rowIdx * portraitRowHeight;
-                        const rowBusY = rowTop + 22;
-                        const rowRcdBoxY = rowTop + 62;
-                        const rowRcdBusY = rowTop + 150;
-                        const rowMcbBoxY = rowTop + 204;
-                        const rowLoadBoxY = rowTop + 324;
-
-                        // Assign column X positions from fixed portrait 4-slot grid
-                        const positionedCols = rowCols.map((col, idx) => ({
-                          ...col,
-                          px: portraitColX[idx],
-                        }));
-                        const rowLastX = positionedCols[positionedCols.length - 1].px;
-
-                        // Group adjacent columns in this row by RCD id to draw RCD headers and sub-busbars
-                        interface RcdRowSegment {
-                          rcd?: RcdConfig;
-                          cols: typeof positionedCols;
-                          isFirstOccurrenceOfRcd: boolean;
-                        }
-                        const segments: RcdRowSegment[] = [];
-                        positionedCols.forEach((pCol) => {
-                          const lastSeg = segments[segments.length - 1];
-                          const rcdId = pCol.parentRcd?.id || 'NONE';
-                          if (lastSeg && (lastSeg.rcd?.id || 'NONE') === rcdId) {
-                            lastSeg.cols.push(pCol);
-                          } else {
-                            // Check if this RCD already appeared in an earlier row
-                            const appearedEarlier =
-                              pCol.parentRcd &&
-                              portraitRows
-                                .slice(0, rowIdx)
-                                .some((prevRow) =>
-                                  prevRow.some((c) => c.parentRcd?.id === pCol.parentRcd?.id)
-                                );
-                            segments.push({
-                              rcd: pCol.parentRcd,
-                              cols: [pCol],
-                              isFirstOccurrenceOfRcd: !appearedEarlier,
-                            });
-                          }
-                        });
-
-                        return (
-                          <g key={`portrait-row-${rowIdx}`}>
-                            {/* Row Label Pill on Left */}
-                            <text
-                              x={102}
-                              y={rowBusY - 6}
-                              fill="#334155"
-                              fontSize={11}
-                              fontWeight="bold"
-                              fontFamily="JetBrains Mono, monospace"
-                            >
-                              RAD {rowIdx + 1} ({positionedCols[0].circuit?.label || positionedCols[0].rcboOnly?.label || ''}–
-                              {positionedCols[positionedCols.length - 1].circuit?.label ||
-                                positionedCols[positionedCols.length - 1].rcboOnly?.label ||
-                                ''})
-                            </text>
-
-                            {/* Row Horizontal Busbar(s) */}
-                            {displayMode === 'single-line' ? (
-                              <>
-                                <line
-                                  x1={62}
-                                  y1={rowBusY}
-                                  x2={rowLastX + 48}
-                                  y2={rowBusY}
-                                  stroke="#000000"
-                                  strokeWidth={3}
-                                />
-                                <circle cx={62} cy={rowBusY} r={4} fill="#000000" />
-                              </>
-                            ) : (
-                              <>
-                                <line x1={42} y1={rowBusY} x2={rowLastX + 48} y2={rowBusY} stroke="#000000" strokeWidth={2.2} />
-                                <circle cx={42} cy={rowBusY} r={3.5} fill="#000000" />
-                                {isThreePhase && (
-                                  <>
-                                    <line x1={52} y1={rowBusY + 12} x2={rowLastX + 48} y2={rowBusY + 12} stroke="#000000" strokeWidth={2} />
-                                    <circle cx={52} cy={rowBusY + 12} r={3.5} fill="#000000" />
-                                    <line x1={62} y1={rowBusY + 24} x2={rowLastX + 48} y2={rowBusY + 24} stroke="#000000" strokeWidth={2} />
-                                    <circle cx={62} cy={rowBusY + 24} r={3.5} fill="#000000" />
-                                  </>
-                                )}
-                                {project.networkSystem !== 'TN-C' && (
-                                  <>
-                                    <line x1={74} y1={rowBusY + 36} x2={rowLastX + 48} y2={rowBusY + 36} stroke="#0369A1" strokeWidth={2.2} />
-                                    <circle cx={74} cy={rowBusY + 36} r={3.5} fill="#0369A1" />
-                                  </>
-                                )}
-                                <line x1={86} y1={rowBusY + 48} x2={rowLastX + 48} y2={rowBusY + 48} stroke="#15803D" strokeWidth={2.2} strokeDasharray="5 3" />
-                                <circle cx={86} cy={rowBusY + 48} r={3.5} fill="#15803D" />
-                              </>
-                            )}
-
-                            {/* RCD Symbols & Sub-busbars for this row */}
-                            {segments.map((seg, sIdx) => {
-                              if (!seg.rcd) return null;
-                              const rcd = seg.rcd;
-                              const firstPx = seg.cols[0].px;
-                              const lastPx = seg.cols[seg.cols.length - 1].px;
-                              const isSelected =
-                                selectedElement?.type === 'rcd' && selectedElement.id === rcd.id;
-                              const hasChildCircuits = seg.cols.some((c) => Boolean(c.circuit));
-
-                              if (!seg.isFirstOccurrenceOfRcd) {
-                                // Continuation sub-busbar from earlier row's RCD
-                                return (
-                                  <g key={`cont-${rcd.id}-${sIdx}`}>
-                                    <rect
-                                      x={firstPx - 78}
-                                      y={rowRcdBoxY + 18}
-                                      width={Math.max(156, lastPx - firstPx + 140)}
-                                      height={24}
-                                      rx={4}
-                                      fill="#EFF6FF"
-                                      stroke="#0369A1"
-                                      strokeWidth={1.5}
-                                    />
-                                    <text
-                                      x={firstPx - 70}
-                                      y={rowRcdBoxY + 34}
-                                      fill="#0369A1"
-                                      fontSize={11.5}
-                                      fontWeight="bold"
-                                      fontFamily="JetBrains Mono, monospace"
-                                    >
-                                      ↳ Pokračovanie z {rcd.label} ({rcd.ratedCurrent}A/{rcd.sensitivity}mA) • N({rcd.label})
-                                    </text>
-                                    <line
-                                      x1={firstPx}
-                                      y1={rowRcdBoxY + 42}
-                                      x2={firstPx}
-                                      y2={rowRcdBusY}
-                                      stroke="#000000"
-                                      strokeWidth={2.4}
-                                    />
-                                    <line
-                                      x1={firstPx}
-                                      y1={rowRcdBusY}
-                                      x2={lastPx}
-                                      y2={rowRcdBusY}
-                                      stroke="#000000"
-                                      strokeWidth={2.8}
-                                    />
-                                    <line
-                                      x1={firstPx}
-                                      y1={rowRcdBusY + 13}
-                                      x2={lastPx + 24}
-                                      y2={rowRcdBusY + 13}
-                                      stroke="#0369A1"
-                                      strokeWidth={2.2}
-                                      strokeDasharray="4 2"
-                                    />
-                                  </g>
-                                );
-                              }
-
-                              return (
-                                <g
-                                  key={`p-rcd-${rcd.id}-${sIdx}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedElement({ type: 'rcd', id: rcd.id });
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  <line
-                                    x1={firstPx}
-                                    y1={rowBusY}
-                                    x2={firstPx}
-                                    y2={rowRcdBoxY}
-                                    stroke="#000000"
-                                    strokeWidth={2.4}
-                                  />
-                                  <circle cx={firstPx} cy={rowBusY} r={4} fill="#000000" />
-
-                                  {/* RCD Symbol Box (52 × 54) */}
-                                  <rect
-                                    x={firstPx - 26}
-                                    y={rowRcdBoxY}
-                                    width={52}
-                                    height={54}
-                                    rx={4}
-                                    fill={isSelected ? '#EFF6FF' : '#FFFFFF'}
-                                    stroke={isSelected ? '#0066FF' : '#000000'}
-                                    strokeWidth={isSelected ? 3 : 2.2}
-                                  />
-                                  <ellipse
-                                    cx={firstPx}
-                                    cy={rowRcdBoxY + 32}
-                                    rx={12}
-                                    ry={5.5}
-                                    fill="none"
-                                    stroke="#000000"
-                                    strokeWidth={1.8}
-                                  />
-                                  <line x1={firstPx} y1={rowRcdBoxY} x2={firstPx} y2={rowRcdBoxY + 14} stroke="#000000" strokeWidth={1.8} />
-                                  <line x1={firstPx} y1={rowRcdBoxY + 40} x2={firstPx} y2={rowRcdBoxY + 54} stroke="#000000" strokeWidth={1.8} />
-                                  <line x1={firstPx} y1={rowRcdBoxY + 40} x2={firstPx - 8} y2={rowRcdBoxY + 16} stroke="#000000" strokeWidth={2.1} />
-                                  {rcd.deviceKind === 'RCBO' && (
-                                    <>
-                                      <line x1={firstPx - 3.5} y1={rowRcdBoxY + 11} x2={firstPx + 3.5} y2={rowRcdBoxY + 18} stroke="#000000" strokeWidth={1.8} />
-                                      <line x1={firstPx + 3.5} y1={rowRcdBoxY + 11} x2={firstPx - 3.5} y2={rowRcdBoxY + 18} stroke="#000000" strokeWidth={1.8} />
-                                    </>
-                                  )}
-                                  {/* Test button T */}
-                                  <rect x={firstPx + 10} y={rowRcdBoxY + 7} width={13} height={12} rx={2} fill="#F8FAFC" stroke="#000000" strokeWidth={1.2} />
-                                  <text x={firstPx + 16.5} y={rowRcdBoxY + 16.5} textAnchor="middle" fill="#000000" fontSize={9} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                    T
-                                  </text>
-
-                                  {/* Compact Split Left/Right RCD Labels (Zero overlap with neighboring columns!) */}
-                                  <text
-                                    x={firstPx - 30}
-                                    y={rowRcdBoxY + 21}
-                                    textAnchor="end"
-                                    fill="#000000"
-                                    fontSize={14}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {rcd.label}
-                                  </text>
-                                  <text
-                                    x={firstPx - 30}
-                                    y={rowRcdBoxY + 38}
-                                    textAnchor="end"
-                                    fill="#0F172A"
-                                    fontSize={11.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {rcd.poles}•{rcd.type}
-                                  </text>
-
-                                  <text
-                                    x={firstPx + 30}
-                                    y={rowRcdBoxY + 21}
-                                    textAnchor="start"
-                                    fill="#000000"
-                                    fontSize={11.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {rcd.deviceKind}
-                                  </text>
-                                  <text
-                                    x={firstPx + 30}
-                                    y={rowRcdBoxY + 38}
-                                    textAnchor="start"
-                                    fill="#0F172A"
-                                    fontSize={11.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {rcd.ratedCurrent}A/{rcd.sensitivity}mA
-                                  </text>
-
-                                  {hasChildCircuits && (
-                                    <>
-                                      <line
-                                        x1={firstPx}
-                                        y1={rowRcdBoxY + 54}
-                                        x2={firstPx}
-                                        y2={rowRcdBusY}
-                                        stroke="#000000"
-                                        strokeWidth={2.4}
-                                      />
-                                      <line
-                                        x1={firstPx}
-                                        y1={rowRcdBusY}
-                                        x2={lastPx}
-                                        y2={rowRcdBusY}
-                                        stroke="#000000"
-                                        strokeWidth={2.8}
-                                      />
-                                      <line
-                                        x1={firstPx}
-                                        y1={rowRcdBusY + 13}
-                                        x2={lastPx + 24}
-                                        y2={rowRcdBusY + 13}
-                                        stroke="#0369A1"
-                                        strokeWidth={2.2}
-                                        strokeDasharray={displayMode === 'wiring-diagram' ? undefined : '4 2'}
-                                      />
-                                      <rect
-                                        x={firstPx + 8}
-                                        y={rowRcdBusY - 24}
-                                        width={Math.max(136, lastPx - firstPx + 42)}
-                                        height={19}
-                                        rx={3}
-                                        fill="#EFF6FF"
-                                        stroke="#0369A1"
-                                        strokeWidth={1.2}
-                                      />
-                                      <text
-                                        x={firstPx + 14}
-                                        y={rowRcdBusY - 11}
-                                        fill="#0369A1"
-                                        fontSize={11}
-                                        fontWeight="bold"
-                                        fontFamily="JetBrains Mono, monospace"
-                                      >
-                                        {rcd.label} • N({rcd.label})
-                                      </text>
-                                    </>
-                                  )}
-                                </g>
-                              );
-                            })}
-
-                            {/* Final Circuits & Standalone RCBOs in this Portrait Row */}
-                            {positionedCols.map((pCol, cIdx) => {
-                              const px = pCol.px;
-                              const c = pCol.circuit;
-
-                              if (!c) {
-                                if (pCol.rcboOnly) {
-                                  const rcbo = pCol.rcboOnly;
-                                  const rcboName = rcbo.circuitName || `Okruh ${rcbo.label}`;
-                                  const rcboLines = wrapTextLines(rcboName, 19, 2);
-                                  const rcboCable =
-                                    rcbo.cableType ||
-                                    (rcbo.poles === '4P' ? 'CYKY-J 5x2,5 mm²' : 'CYKY-J 3x2,5 mm²');
-                                  const rcboPower = rcbo.powerKw ?? 2.2;
-                                  const rcboPhase =
-                                    rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1');
-                                  return (
-                                    <g
-                                      key={`p-rcbo-${rcbo.id}-${cIdx}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedElement({ type: 'rcd', id: rcbo.id });
-                                      }}
-                                      className="cursor-pointer"
-                                    >
-                                      <line
-                                        x1={px}
-                                        y1={rowRcdBoxY + 54}
-                                        x2={px}
-                                        y2={rowLoadBoxY}
-                                        stroke="#000000"
-                                        strokeWidth={2.2}
-                                      />
-                                      {/* Conductor count */}
-                                      <line x1={px - 6} y1={rowRcdBoxY + 94} x2={px + 6} y2={rowRcdBoxY + 84} stroke="#000000" strokeWidth={1.8} />
-                                      <text x={px + 10} y={rowRcdBoxY + 94} fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        {rcbo.poles === '4P' ? '5' : '3'}
-                                      </text>
-
-                                      {/* Horizontal Readable Cable Tag */}
-                                      <rect
-                                        x={px - 80}
-                                        y={rowLoadBoxY - 46}
-                                        width={160}
-                                        height={36}
-                                        rx={4}
-                                        fill="#FFFFFF"
-                                        stroke="#64748B"
-                                        strokeWidth={1.2}
-                                      />
-                                      <text x={px} y={rowLoadBoxY - 31} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        {rcboCable}
-                                      </text>
-                                      <text x={px} y={rowLoadBoxY - 16} textAnchor="middle" fill="#1E293B" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        {rcboPhase} • {rcbo.cableLengthM || 15} m
-                                      </text>
-
-                                      {/* Large Load Box */}
-                                      <rect
-                                        x={px - 84}
-                                        y={rowLoadBoxY}
-                                        width={168}
-                                        height={82}
-                                        rx={5}
-                                        fill="#FFFFFF"
-                                        stroke="#000000"
-                                        strokeWidth={2}
-                                      />
-                                      <text x={px} y={rowLoadBoxY + 21} textAnchor="middle" fill="#000000" fontSize={13} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                                        {rcboLines[0]}
-                                      </text>
-                                      {rcboLines[1] && (
-                                        <text x={px} y={rowLoadBoxY + 38} textAnchor="middle" fill="#000000" fontSize={12.5} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                                          {rcboLines[1]}
-                                        </text>
-                                      )}
-                                      <text x={px} y={rowLoadBoxY + (rcboLines[1] ? 55 : 46)} textAnchor="middle" fill="#334155" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        RCBO ({rcboPhase})
-                                      </text>
-                                      <text x={px} y={rowLoadBoxY + 73} textAnchor="middle" fill="#000000" fontSize={12.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        P = {rcboPower.toFixed(2)} kW
-                                      </text>
-                                    </g>
-                                  );
-                                }
-                                return (
-                                  <g key={`p-empty-${cIdx}`}>
-                                    <text x={px} y={rowMcbBoxY + 24} textAnchor="middle" fill="#475569" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                      Rezerva FI
-                                    </text>
-                                  </g>
-                                );
-                              }
-
-                              const hasParentRcd = Boolean(pCol.parentRcd);
-                              const topSourceY = hasParentRcd ? rowRcdBusY : rowBusY;
-                              const isCircuitSelected =
-                                selectedElement?.type === 'circuit' && selectedElement.id === c.id;
-                              const nameLines = wrapTextLines(c.name, 19, 2);
-
-                              return (
-                                <g
-                                  key={`p-circ-${c.id}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedElement({ type: 'circuit', id: c.id });
-                                  }}
-                                  className="cursor-pointer"
-                                >
-                                  <line
-                                    x1={px}
-                                    y1={topSourceY}
-                                    x2={px}
-                                    y2={rowMcbBoxY}
-                                    stroke="#000000"
-                                    strokeWidth={2.2}
-                                  />
-                                  <circle cx={px} cy={topSourceY} r={3.8} fill="#000000" />
-
-                                  {(displayMode === 'multi-line' || displayMode === 'wiring-diagram') &&
-                                    (c.poles === '3P' || c.poles === '4P') && (
-                                      <>
-                                        <line x1={px - 7} y1={topSourceY} x2={px - 7} y2={rowMcbBoxY} stroke="#000000" strokeWidth={1.6} />
-                                        <line x1={px + 7} y1={topSourceY} x2={px + 7} y2={rowMcbBoxY} stroke="#000000" strokeWidth={1.6} />
-                                      </>
-                                    )}
-
-                                  {/* MCB Label & Rating ABOVE Breaker Box (Large high-contrast text) */}
-                                  <text
-                                    x={px}
-                                    y={rowMcbBoxY - 26}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={15.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {c.label}
-                                  </text>
-                                  <text
-                                    x={px}
-                                    y={rowMcbBoxY - 8}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={13}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {c.characteristic}
-                                    {c.ratedCurrent}A ({c.poles})
-                                  </text>
-
-                                  {/* MCB Box (54 × 56) */}
-                                  <rect
-                                    x={px - 27}
-                                    y={rowMcbBoxY}
-                                    width={54}
-                                    height={56}
-                                    rx={4}
-                                    fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
-                                    stroke={isCircuitSelected ? '#0066FF' : '#000000'}
-                                    strokeWidth={isCircuitSelected ? 3 : 2}
-                                  />
-                                  <line x1={px} y1={rowMcbBoxY} x2={px} y2={rowMcbBoxY + 14} stroke="#000000" strokeWidth={1.8} />
-                                  <line x1={px} y1={rowMcbBoxY + 42} x2={px} y2={rowMcbBoxY + 56} stroke="#000000" strokeWidth={1.8} />
-                                  <line x1={px} y1={rowMcbBoxY + 42} x2={px - 10} y2={rowMcbBoxY + 17} stroke="#000000" strokeWidth={2.2} />
-                                  <path
-                                    d={`M ${px - 6} ${rowMcbBoxY + 27} L ${px - 1} ${rowMcbBoxY + 27} L ${px - 1} ${rowMcbBoxY + 33}`}
-                                    fill="none"
-                                    stroke="#000000"
-                                    strokeWidth={1.5}
-                                  />
-
-                                  {/* Phase Badge */}
-                                  <rect
-                                    x={px + 31}
-                                    y={rowMcbBoxY + 4}
-                                    width={34}
-                                    height={18}
-                                    rx={3}
-                                    fill="#F8FAFC"
-                                    stroke="#000000"
-                                    strokeWidth={1.3}
-                                  />
-                                  <text
-                                    x={px + 48}
-                                    y={rowMcbBoxY + 17}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={11.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {c.phase === 'L1,L2,L3' ? '3F' : c.phase}
-                                  </text>
-
-                                  {/* Outgoing Wire(s) */}
-                                  {displayMode === 'wiring-diagram' ? (
-                                    <g>
-                                      <line x1={px} y1={rowMcbBoxY + 56} x2={px} y2={rowLoadBoxY} stroke="#000000" strokeWidth={2} />
-                                      <polyline
-                                        points={`${px + 32},${hasParentRcd ? rowRcdBusY + 13 : rowBusY + 36} ${px + 32},${rowMcbBoxY + 62} ${px + 6},${rowMcbBoxY + 62} ${px + 6},${rowLoadBoxY}`}
-                                        fill="none"
-                                        stroke="#0369A1"
-                                        strokeWidth={1.8}
-                                      />
-                                      <circle cx={px + 32} cy={hasParentRcd ? rowRcdBusY + 13 : rowBusY + 36} r={3} fill="#0369A1" />
-                                      <polyline
-                                        points={`${px + 38},${rowBusY + 48} ${px + 38},${rowMcbBoxY + 68} ${px + 12},${rowMcbBoxY + 68} ${px + 12},${rowLoadBoxY}`}
-                                        fill="none"
-                                        stroke="#15803D"
-                                        strokeWidth={1.7}
-                                        strokeDasharray="4 2"
-                                      />
-                                      <circle cx={px + 38} cy={rowBusY + 48} r={3} fill="#15803D" />
-                                    </g>
-                                  ) : (
-                                    <g>
-                                      <line x1={px} y1={rowMcbBoxY + 56} x2={px} y2={rowLoadBoxY} stroke="#000000" strokeWidth={2} />
-                                      <line x1={px - 6} y1={rowMcbBoxY + 72} x2={px + 6} y2={rowMcbBoxY + 63} stroke="#000000" strokeWidth={1.8} />
-                                      <text x={px + 10} y={rowMcbBoxY + 71} fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                                        {c.poles === '3P' || c.poles === '4P' ? '5' : '3'}
-                                      </text>
-                                    </g>
-                                  )}
-
-                                  {/* Horizontal Cable Tag Pill (Easy to read when printed!) */}
-                                  <rect
-                                    x={px - 80}
-                                    y={rowLoadBoxY - 46}
-                                    width={160}
-                                    height={36}
-                                    rx={4}
-                                    fill="#FFFFFF"
-                                    stroke="#64748B"
-                                    strokeWidth={1.2}
-                                  />
-                                  <text
-                                    x={px}
-                                    y={rowLoadBoxY - 31}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={11.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    {c.cable.length > 21 ? `${c.cable.slice(0, 20)}…` : c.cable}
-                                  </text>
-                                  <text
-                                    x={px}
-                                    y={rowLoadBoxY - 16}
-                                    textAnchor="middle"
-                                    fill="#1E293B"
-                                    fontSize={11}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    Dĺžka: {c.cableLengthM || 15} m
-                                  </text>
-
-                                  {/* Large Load Box */}
-                                  <rect
-                                    x={px - 84}
-                                    y={rowLoadBoxY}
-                                    width={168}
-                                    height={82}
-                                    rx={5}
-                                    fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
-                                    stroke={isCircuitSelected ? '#0066FF' : '#000000'}
-                                    strokeWidth={2}
-                                  />
-                                  <text
-                                    x={px}
-                                    y={rowLoadBoxY + 21}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={13}
-                                    fontWeight="bold"
-                                    fontFamily="Plus Jakarta Sans, sans-serif"
-                                  >
-                                    {nameLines[0]}
-                                  </text>
-                                  {nameLines[1] && (
-                                    <text
-                                      x={px}
-                                      y={rowLoadBoxY + 38}
-                                      textAnchor="middle"
-                                      fill="#000000"
-                                      fontSize={12.5}
-                                      fontWeight="bold"
-                                      fontFamily="Plus Jakarta Sans, sans-serif"
-                                    >
-                                      {nameLines[1]}
-                                    </text>
-                                  )}
-                                  <text
-                                    x={px}
-                                    y={rowLoadBoxY + (nameLines[1] ? 55 : 46)}
-                                    textAnchor="middle"
-                                    fill="#334155"
-                                    fontSize={11}
-                                    fontWeight="bold"
-                                    fontFamily="Plus Jakarta Sans, sans-serif"
-                                  >
-                                    {c.category.length > 22 ? `${c.category.slice(0, 21)}…` : c.category}
-                                  </text>
-                                  <text
-                                    x={px}
-                                    y={rowLoadBoxY + 73}
-                                    textAnchor="middle"
-                                    fill="#000000"
-                                    fontSize={12.5}
-                                    fontWeight="bold"
-                                    fontFamily="JetBrains Mono, monospace"
-                                  >
-                                    P = {c.powerKw.toFixed(2)} kW
-                                  </text>
-                                </g>
-                              );
-                            })}
-                          </g>
-                        );
-                      })}
-                    </g>
-                  );
-                })()}
-
-                {/* Bottom Full-Width STN Title Block in Portrait Mode */}
-                <g transform={`translate(28, ${canvasHeight - 102})`}>
-                  <rect x={0} y={0} width={904} height={76} fill="#FFFFFF" stroke="#000000" strokeWidth={2} />
-                  <line x1={0} y1={26} x2={904} y2={26} stroke="#000000" strokeWidth={1.3} />
-                  <line x1={0} y1={51} x2={904} y2={51} stroke="#000000" strokeWidth={1.3} />
-                  <line x1={590} y1={0} x2={590} y2={76} stroke="#000000" strokeWidth={1.3} />
-
-                  <text x={12} y={18} fill="#000000" fontSize={12.5} fontWeight="bold" fontFamily="Inter, Plus Jakarta Sans, sans-serif">
-                    NÁZOV: {project.name.length > 48 ? `${project.name.slice(0, 48)}…` : project.name}
-                  </text>
-                  <text x={604} y={18} fill="#000000" fontSize={12.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                    SÚSTAVA: {project.networkSystem} ({project.voltage})
-                  </text>
-
-                  <text x={12} y={43} fill="#0F172A" fontSize={12} fontWeight="bold" fontFamily="Inter, Plus Jakarta Sans, sans-serif">
-                    Vypracoval:{' '}
-                    {(project.designerName || 'Projekčná kancelária').length > 45
-                      ? `${(project.designerName || 'Projekčná kancelária').slice(0, 45)}…`
-                      : project.designerName || 'Projekčná kancelária'}
-                  </text>
-                  <text x={604} y={43} fill="#0F172A" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                    Dátum: {project.projectDate}
-                  </text>
-
-                  <text x={12} y={68} fill="#1E293B" fontSize={12} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                    Norma: STN EN 61439-3 / STN 33 2000-4-41 • Formát A4 na výšku
-                  </text>
-                  <text x={604} y={68} fill="#000000" fontSize={12.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                    Č. zákazky: {project.projectNumber}
-                  </text>
-                </g>
-              </>
+                  </>
+                );
+              })()
             ) : (
               /* ================================================================= */
-              /* LANDSCAPE MODE (NA ŠÍRKU) — ZVÄČŠENÉ ČITATEĽNÉ FONTY A KONTRAST    */
+              /* LANDSCAPE MODE (NA ŠÍRKU) — VETVY AJ TEXT ZHORA DOLE (ROTATE 90)  */
               /* ================================================================= */
               <>
                 {/* Top Header Banner inside Schema */}
@@ -2291,7 +3231,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                     {displayMode === 'single-line'
                       ? 'JEDNOPÓLOVÁ SCHÉMA ZAPOJENIA (1L)'
                       : displayMode === 'multi-line'
-                      ? 'VIACPÓLOVÁ SCHÉMA ZAPOJENIA (3L)'
+                      ? 'TROJPÓLOVÁ / VIACPÓLOVÁ SCHÉMA ZAPOJENIA (3L)'
                       : 'DETAILNÁ SCHÉMA ZAPOJENIA VODIČOV (L1, L2, L3, N, PE / PEN)'}
                   </text>
                   <text
@@ -2647,14 +3587,14 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   </g>
                 )}
 
-                {/* 4. RCD GROUPS (RCCB / RCBO) & SUB-BUSBARS */}
+                {/* 4. RCD GROUPS (RCCB / RCBO) & SUB-BUSBARS — VERTICAL TEXT ZHORA DOLE */}
                 {rcdGroups.map((group, gIdx) => {
                   const groupCols = columns.filter((col) => col.groupIndex === gIdx);
                   if (groupCols.length === 0) return null;
 
                   const firstX = groupCols[0].x;
                   const lastX = groupCols[groupCols.length - 1].x;
-                  const rcdCenterX = firstX;
+                  const rcdCenterX = firstX - 14;
                   const rcd = group.rcd;
                   const isSelected = selectedElement?.type === 'rcd' && selectedElement.id === rcd.id;
 
@@ -2667,7 +3607,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       }}
                       className="cursor-pointer"
                     >
-                      {displayMode === 'wiring-diagram' ? (
+                      {displayMode !== 'single-line' ? (
                         <>
                           <line x1={rcdCenterX - 8} y1={busY_L1} x2={rcdCenterX - 8} y2={rcdBoxY} stroke="#000000" strokeWidth={1.8} />
                           <circle cx={rcdCenterX - 8} cy={busY_L1} r={3.2} fill="#000000" />
@@ -2694,62 +3634,73 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       )}
 
                       <rect
-                        x={rcdCenterX - 32}
+                        x={rcdCenterX - 18}
                         y={rcdBoxY}
-                        width={64}
-                        height={60}
+                        width={36}
+                        height={56}
                         rx={4}
                         fill={isSelected ? '#EFF6FF' : '#FFFFFF'}
                         stroke={isSelected ? '#0066FF' : '#000000'}
                         strokeWidth={isSelected ? 2.8 : 2}
                       />
 
-                      <ellipse cx={rcdCenterX} cy={rcdBoxY + 35} rx={14} ry={6} fill="none" stroke="#000000" strokeWidth={1.7} />
-                      <line x1={rcdCenterX} y1={rcdBoxY} x2={rcdCenterX} y2={rcdBoxY + 15} stroke="#000000" strokeWidth={1.7} />
-                      <line x1={rcdCenterX} y1={rcdBoxY + 43} x2={rcdCenterX} y2={rcdBoxY + 60} stroke="#000000" strokeWidth={1.7} />
-                      <line x1={rcdCenterX} y1={rcdBoxY + 43} x2={rcdCenterX - 9} y2={rcdBoxY + 17} stroke="#000000" strokeWidth={2} />
+                      <ellipse cx={rcdCenterX} cy={rcdBoxY + 34} rx={11} ry={5} fill="none" stroke="#000000" strokeWidth={1.7} />
+                      <line x1={rcdCenterX} y1={rcdBoxY} x2={rcdCenterX} y2={rcdBoxY + 14} stroke="#000000" strokeWidth={1.7} />
+                      <line x1={rcdCenterX} y1={rcdBoxY + 41} x2={rcdCenterX} y2={rcdBoxY + 56} stroke="#000000" strokeWidth={1.7} />
+                      <line x1={rcdCenterX} y1={rcdBoxY + 41} x2={rcdCenterX - 7} y2={rcdBoxY + 16} stroke="#000000" strokeWidth={2} />
                       {rcd.deviceKind === 'RCBO' && (
                         <>
-                          <line x1={rcdCenterX - 3.5} y1={rcdBoxY + 12} x2={rcdCenterX + 3.5} y2={rcdBoxY + 19} stroke="#000000" strokeWidth={1.7} />
-                          <line x1={rcdCenterX + 3.5} y1={rcdBoxY + 12} x2={rcdCenterX - 3.5} y2={rcdBoxY + 19} stroke="#000000" strokeWidth={1.7} />
+                          <line x1={rcdCenterX - 3.5} y1={rcdBoxY + 11} x2={rcdCenterX + 3.5} y2={rcdBoxY + 18} stroke="#000000" strokeWidth={1.7} />
+                          <line x1={rcdCenterX + 3.5} y1={rcdBoxY + 11} x2={rcdCenterX - 3.5} y2={rcdBoxY + 18} stroke="#000000" strokeWidth={1.7} />
                         </>
                       )}
 
-                      <rect x={rcdCenterX + 12} y={rcdBoxY + 8} width={14} height={12} rx={2} fill="#F8FAFC" stroke="#000000" strokeWidth={1.2} />
-                      <text x={rcdCenterX + 19} y={rcdBoxY + 17.5} textAnchor="middle" fill="#000000" fontSize={9} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                      <rect x={rcdCenterX + 5} y={rcdBoxY + 6} width={11} height={11} rx={2} fill="#F8FAFC" stroke="#000000" strokeWidth={1.1} />
+                      <text x={rcdCenterX + 10.5} y={rcdBoxY + 14.5} textAnchor="middle" fill="#000000" fontSize={8.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
                         T
                       </text>
 
-                      <text x={rcdCenterX - 38} y={rcdBoxY + 15} textAnchor="end" fill="#000000" fontSize={13} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {rcd.label}
+                      {/* Vertical RCD Label oriented TOP-TO-BOTTOM (rotate(90)) */}
+                      <text
+                        x={firstX + 22}
+                        y={rcdBoxY - 2}
+                        textAnchor="start"
+                        fill="#000000"
+                        fontSize={12.5}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${firstX + 22}, ${rcdBoxY - 2})`}
+                      >
+                        {rcd.label} • {rcd.deviceKind} {rcd.poles}
                       </text>
-                      <text x={rcdCenterX - 38} y={rcdBoxY + 30} textAnchor="end" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {rcd.deviceKind} {rcd.poles}
-                      </text>
-                      <text x={rcdCenterX - 38} y={rcdBoxY + 44} textAnchor="end" fill="#0F172A" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {rcd.characteristic ? `${rcd.characteristic}` : ''}
-                        {rcd.ratedCurrent}A/{rcd.sensitivity}mA
-                      </text>
-                      <text x={rcdCenterX - 38} y={rcdBoxY + 57} textAnchor="end" fill="#000000" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        Typ {rcd.type}
+                      <text
+                        x={firstX + 9}
+                        y={rcdBoxY - 2}
+                        textAnchor="start"
+                        fill="#0F172A"
+                        fontSize={11}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${firstX + 9}, ${rcdBoxY - 2})`}
+                      >
+                        {rcd.ratedCurrent}A/{rcd.sensitivity}mA • Typ {rcd.type}
                       </text>
 
                       {group.circuits.length > 0 && (
                         <>
-                          <line x1={rcdCenterX} y1={rcdBoxY + 60} x2={rcdCenterX} y2={rcdBusY} stroke="#000000" strokeWidth={2.2} />
-                          <line x1={firstX} y1={rcdBusY} x2={lastX} y2={rcdBusY} stroke="#000000" strokeWidth={2.8} />
+                          <line x1={rcdCenterX} y1={rcdBoxY + 56} x2={rcdCenterX} y2={rcdBusY} stroke="#000000" strokeWidth={2.2} />
+                          <line x1={rcdCenterX} y1={rcdBusY} x2={lastX - 14} y2={rcdBusY} stroke="#000000" strokeWidth={2.8} />
                           <line
-                            x1={firstX}
+                            x1={rcdCenterX}
                             y1={rcdBusY + 13}
-                            x2={lastX + 32}
+                            x2={lastX + 12}
                             y2={rcdBusY + 13}
                             stroke="#0369A1"
                             strokeWidth={2.2}
                             strokeDasharray={displayMode === 'wiring-diagram' ? undefined : '4 2'}
                           />
-                          <rect x={firstX - 2} y={rcdBusY - 25} width={Math.max(150, lastX - firstX + 64)} height={19} rx={3} fill="#EFF6FF" stroke="#0369A1" strokeWidth={1.2} />
-                          <text x={firstX + 8} y={rcdBusY - 12} fill="#0369A1" fontSize={11} fontFamily="JetBrains Mono, monospace" fontWeight="bold">
-                            {rcd.label} • N({rcd.label})
+                          <text x={rcdCenterX - 18} y={rcdBusY - 5} fill="#0369A1" fontSize={11} fontFamily="JetBrains Mono, monospace" fontWeight="bold">
+                            N({rcd.label})
                           </text>
                         </>
                       )}
@@ -2757,16 +3708,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   );
                 })}
 
-                {/* 5. FINAL CIRCUITS (MCBs) & STANDALONE RCBOs */}
+                {/* 5. FINAL CIRCUITS (MCBs) & STANDALONE RCBOs — VERTICAL TEXT ZHORA DOLE */}
                 {columns.map((col, idx) => {
                   const x = col.x;
+                  const symX = x - 14;
                   const c = col.circuit;
 
                   if (!c) {
                     if (col.rcboOnly) {
                       const rcbo = col.rcboOnly;
                       const rcboName = rcbo.circuitName || `Okruh ${rcbo.label}`;
-                      const rcboLines = wrapTextLines(rcboName, 15, 2);
                       const rcboCable = rcbo.cableType || (rcbo.poles === '4P' ? 'CYKY-J 5x2,5 mm²' : 'CYKY-J 3x2,5 mm²');
                       const rcboPower = rcbo.powerKw ?? 2.2;
                       const rcboPhase = rcbo.phase || (rcbo.poles === '4P' ? 'L1,L2,L3' : 'L1');
@@ -2779,42 +3730,65 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                           }}
                           className="cursor-pointer"
                         >
-                          <line x1={x} y1={rcdBoxY + 60} x2={x} y2={loadBoxY} stroke="#000000" strokeWidth={2} />
-                          {displayMode === 'wiring-diagram' && (
+                          <line x1={symX} y1={rcdBoxY + 56} x2={symX} y2={loadBoxY} stroke="#000000" strokeWidth={2} />
+                          {displayMode !== 'single-line' && (
                             <>
-                              <line x1={x + 4} y1={rcdBoxY + 60} x2={x + 4} y2={loadBoxY} stroke="#0369A1" strokeWidth={1.7} />
-                              <line x1={x + 9} y1={busY_PE} x2={x + 9} y2={loadBoxY} stroke="#15803D" strokeWidth={1.6} strokeDasharray="4 2" />
-                              <circle cx={x + 9} cy={busY_PE} r={2.8} fill="#15803D" />
+                              <line x1={symX + 5} y1={rcdBoxY + 56} x2={symX + 5} y2={loadBoxY} stroke="#0369A1" strokeWidth={1.7} />
+                              <line x1={symX + 10} y1={busY_PE} x2={symX + 10} y2={loadBoxY} stroke="#15803D" strokeWidth={1.6} strokeDasharray="4 2" />
+                              <circle cx={symX + 10} cy={busY_PE} r={2.8} fill="#15803D" />
                             </>
                           )}
-                          <line x1={x - 6} y1={mcbBoxY + 72} x2={x + 6} y2={mcbBoxY + 63} stroke="#000000" strokeWidth={1.8} />
-                          <text x={x + 10} y={mcbBoxY + 71} fill="#000000" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                          <line x1={symX - 6} y1={mcbBoxY + 80} x2={symX + 6} y2={mcbBoxY + 71} stroke="#000000" strokeWidth={1.8} />
+                          <text x={symX - 16} y={mcbBoxY + 80} fill="#000000" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
                             {rcbo.poles === '4P' ? '5' : '3'}
                           </text>
                           <text
-                            x={x - 10}
-                            y={loadBoxY - 8}
+                            x={x + 12}
+                            y={mcbBoxY + 100}
+                            textAnchor="start"
                             fill="#0F172A"
-                            fontSize={10.5}
+                            fontSize={11.5}
                             fontWeight="bold"
                             fontFamily="JetBrains Mono, monospace"
-                            transform={`rotate(-90, ${x - 10}, ${loadBoxY - 8})`}
+                            transform={`rotate(90, ${x + 12}, ${mcbBoxY + 100})`}
                           >
                             {rcboCable} (15m)
                           </text>
-                          <rect x={x - 56} y={loadBoxY} width={112} height={74} rx={4} fill="#FFFFFF" stroke="#000000" strokeWidth={1.8} />
-                          <text x={x} y={loadBoxY + 19} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                            {rcboLines[0]}
+                          <rect x={x - 34} y={loadBoxY} width={68} height={310} rx={4} fill="#FFFFFF" stroke="#000000" strokeWidth={1.8} />
+                          <text
+                            x={x + 14}
+                            y={loadBoxY + 16}
+                            textAnchor="start"
+                            fill="#000000"
+                            fontSize={13.5}
+                            fontWeight="bold"
+                            fontFamily="Plus Jakarta Sans, sans-serif"
+                            transform={`rotate(90, ${x + 14}, ${loadBoxY + 16})`}
+                          >
+                            {rcbo.label} — {rcboName}
                           </text>
-                          {rcboLines[1] && (
-                            <text x={x} y={loadBoxY + 34} textAnchor="middle" fill="#000000" fontSize={11} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                              {rcboLines[1]}
-                            </text>
-                          )}
-                          <text x={x} y={loadBoxY + 50} textAnchor="middle" fill="#1E293B" fontSize={10.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                          <text
+                            x={x - 1}
+                            y={loadBoxY + 16}
+                            textAnchor="start"
+                            fill="#1E293B"
+                            fontSize={11.5}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                            transform={`rotate(90, ${x - 1}, ${loadBoxY + 16})`}
+                          >
                             RCBO ({rcboPhase})
                           </text>
-                          <text x={x} y={loadBoxY + 66} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                          <text
+                            x={x - 16}
+                            y={loadBoxY + 16}
+                            textAnchor="start"
+                            fill="#0369A1"
+                            fontSize={12}
+                            fontWeight="bold"
+                            fontFamily="JetBrains Mono, monospace"
+                            transform={`rotate(90, ${x - 16}, ${loadBoxY + 16})`}
+                          >
                             P = {rcboPower.toFixed(2)} kW
                           </text>
                         </g>
@@ -2823,7 +3797,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
 
                     return (
                       <g key={`empty-${idx}`}>
-                        <text x={x} y={mcbBoxY + 25} textAnchor="middle" fill="#475569" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                        <text
+                          x={x}
+                          y={mcbBoxY + 10}
+                          textAnchor="start"
+                          fill="#475569"
+                          fontSize={11.5}
+                          fontWeight="bold"
+                          fontFamily="JetBrains Mono, monospace"
+                          transform={`rotate(90, ${x}, ${mcbBoxY + 10})`}
+                        >
                           Rezerva FI
                         </text>
                       </g>
@@ -2833,7 +3816,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   const hasParentRcd = Boolean(col.parentRcd);
                   const topSourceY = hasParentRcd ? rcdBusY : busY_L1;
                   const isCircuitSelected = selectedElement?.type === 'circuit' && selectedElement.id === c.id;
-                  const nameLines = wrapTextLines(c.name, 15, 2);
+                  const isThreePoleCircuit = c.poles === '3P' || c.poles === '4P';
 
                   return (
                     <g
@@ -2845,114 +3828,147 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       onDragOver={(e) => e.preventDefault()}
                       className="cursor-pointer"
                     >
-                      <line x1={x} y1={topSourceY} x2={x} y2={mcbBoxY} stroke="#000000" strokeWidth={2} />
-                      <circle cx={x} cy={topSourceY} r={3.5} fill="#000000" />
+                      <line x1={symX} y1={topSourceY} x2={symX} y2={mcbBoxY} stroke="#000000" strokeWidth={2} />
+                      <circle cx={symX} cy={topSourceY} r={3.5} fill="#000000" />
 
-                      {(displayMode === 'multi-line' || displayMode === 'wiring-diagram') &&
-                        (c.poles === '3P' || c.poles === '4P') && (
-                          <>
-                            <line x1={x - 6} y1={topSourceY} x2={x - 6} y2={mcbBoxY} stroke="#000000" strokeWidth={1.5} />
-                            <line x1={x + 6} y1={topSourceY} x2={x + 6} y2={mcbBoxY} stroke="#000000" strokeWidth={1.5} />
-                          </>
-                        )}
+                      {displayMode !== 'single-line' && isThreePoleCircuit && (
+                        <>
+                          <line x1={symX - 6} y1={topSourceY} x2={symX - 6} y2={mcbBoxY} stroke="#000000" strokeWidth={1.6} />
+                          <line x1={symX + 6} y1={topSourceY} x2={symX + 6} y2={mcbBoxY} stroke="#000000" strokeWidth={1.6} />
+                        </>
+                      )}
 
                       <rect
-                        x={x - 25}
+                        x={symX - 18}
                         y={mcbBoxY}
-                        width={50}
+                        width={36}
                         height={54}
                         rx={4}
                         fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
                         stroke={isCircuitSelected ? '#0066FF' : '#000000'}
                         strokeWidth={isCircuitSelected ? 2.8 : 1.9}
                       />
-                      <line x1={x} y1={mcbBoxY} x2={x} y2={mcbBoxY + 13} stroke="#000000" strokeWidth={1.8} />
-                      <line x1={x} y1={mcbBoxY + 41} x2={x} y2={mcbBoxY + 54} stroke="#000000" strokeWidth={1.8} />
-                      <line x1={x} y1={mcbBoxY + 41} x2={x - 9} y2={mcbBoxY + 16} stroke="#000000" strokeWidth={2} />
+                      <line x1={symX} y1={mcbBoxY} x2={symX} y2={mcbBoxY + 13} stroke="#000000" strokeWidth={1.8} />
+                      <line x1={symX} y1={mcbBoxY + 41} x2={symX} y2={mcbBoxY + 54} stroke="#000000" strokeWidth={1.8} />
+                      <line x1={symX} y1={mcbBoxY + 41} x2={symX - 9} y2={mcbBoxY + 16} stroke="#000000" strokeWidth={2} />
                       <path
-                        d={`M ${x - 5} ${mcbBoxY + 26} L ${x - 1} ${mcbBoxY + 26} L ${x - 1} ${mcbBoxY + 31}`}
+                        d={`M ${symX - 5} ${mcbBoxY + 26} L ${symX - 1} ${mcbBoxY + 26} L ${symX - 1} ${mcbBoxY + 31}`}
                         fill="none"
                         stroke="#000000"
                         strokeWidth={1.4}
                       />
 
-                      <text x={x} y={mcbBoxY - 24} textAnchor="middle" fill="#000000" fontSize={13.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {c.label}
-                      </text>
-                      <text x={x} y={mcbBoxY - 7} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {c.characteristic}
+                      {/* Vertical MCB Label oriented TOP-TO-BOTTOM (rotate(90)) */}
+                      <text
+                        x={x + 22}
+                        y={mcbBoxY - 2}
+                        textAnchor="start"
+                        fill="#000000"
+                        fontSize={13}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${x + 22}, ${mcbBoxY - 2})`}
+                      >
+                        {c.label} • {c.characteristic}
                         {c.ratedCurrent}A ({c.poles})
                       </text>
-
-                      <rect x={x + 16} y={mcbBoxY + 4} width={c.phase === 'L1,L2,L3' ? 30 : 24} height={16} rx={2} fill="#F8FAFC" stroke="#000000" strokeWidth={1.2} />
-                      <text x={x + (c.phase === 'L1,L2,L3' ? 31 : 28)} y={mcbBoxY + 15} textAnchor="middle" fill="#000000" fontSize={10} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        {c.phase === 'L1,L2,L3' ? '3F' : c.phase}
+                      <text
+                        x={x + 9}
+                        y={mcbBoxY - 2}
+                        textAnchor="start"
+                        fill="#0F172A"
+                        fontSize={11}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${x + 9}, ${mcbBoxY - 2})`}
+                      >
+                        Fáza {c.phase === 'L1,L2,L3' ? '3F' : c.phase} • {c.breakingCapacity}
                       </text>
 
-                      {displayMode === 'wiring-diagram' ? (
+                      {displayMode !== 'single-line' ? (
                         <g>
-                          <line x1={x} y1={mcbBoxY + 54} x2={x} y2={loadBoxY} stroke="#000000" strokeWidth={1.8} />
-                          <polyline
-                            points={`${x + 28},${hasParentRcd ? rcdBusY + 13 : busY_N} ${x + 28},${mcbBoxY + 60} ${x + 5},${mcbBoxY + 60} ${x + 5},${loadBoxY}`}
-                            fill="none"
-                            stroke="#0369A1"
-                            strokeWidth={1.7}
-                          />
-                          <circle cx={x + 28} cy={hasParentRcd ? rcdBusY + 13 : busY_N} r={2.8} fill="#0369A1" />
-                          <polyline
-                            points={`${x + 34},${busY_PE} ${x + 34},${mcbBoxY + 66} ${x + 10},${mcbBoxY + 66} ${x + 10},${loadBoxY}`}
-                            fill="none"
-                            stroke="#15803D"
-                            strokeWidth={1.6}
-                            strokeDasharray="4 2"
-                          />
-                          <circle cx={x + 34} cy={busY_PE} r={2.8} fill="#15803D" />
+                          <line x1={symX} y1={mcbBoxY + 54} x2={symX} y2={loadBoxY} stroke="#000000" strokeWidth={1.8} />
+                          {isThreePoleCircuit && (
+                            <>
+                              <line x1={symX - 6} y1={mcbBoxY + 54} x2={symX - 6} y2={loadBoxY} stroke="#000000" strokeWidth={1.5} />
+                              <line x1={symX + 6} y1={mcbBoxY + 54} x2={symX + 6} y2={loadBoxY} stroke="#000000" strokeWidth={1.5} />
+                            </>
+                          )}
+                          <line x1={symX + 11} y1={hasParentRcd ? rcdBusY + 13 : busY_N} x2={symX + 11} y2={loadBoxY} stroke="#0369A1" strokeWidth={1.7} />
+                          <circle cx={symX + 11} cy={hasParentRcd ? rcdBusY + 13 : busY_N} r={2.8} fill="#0369A1" />
+                          <line x1={symX + 16} y1={busY_PE} x2={symX + 16} y2={loadBoxY} stroke="#15803D" strokeWidth={1.6} strokeDasharray="4 2" />
+                          <circle cx={symX + 16} cy={busY_PE} r={2.8} fill="#15803D" />
                         </g>
                       ) : (
                         <g>
-                          <line x1={x} y1={mcbBoxY + 54} x2={x} y2={loadBoxY} stroke="#000000" strokeWidth={1.8} />
-                          <line x1={x - 5} y1={mcbBoxY + 72} x2={x + 5} y2={mcbBoxY + 63} stroke="#000000" strokeWidth={1.8} />
-                          <text x={x + 9} y={mcbBoxY + 71} fill="#000000" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                            {c.poles === '3P' || c.poles === '4P' ? '5' : '3'}
+                          <line x1={symX} y1={mcbBoxY + 54} x2={symX} y2={loadBoxY} stroke="#000000" strokeWidth={1.8} />
+                          <line x1={symX - 5} y1={mcbBoxY + 80} x2={symX + 5} y2={mcbBoxY + 71} stroke="#000000" strokeWidth={1.8} />
+                          <text x={symX - 15} y={mcbBoxY + 80} fill="#000000" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
+                            {isThreePoleCircuit ? '5' : '3'}
                           </text>
                         </g>
                       )}
 
+                      {/* Vertical Cable Text oriented TOP-TO-BOTTOM (rotate(90)) */}
                       <text
-                        x={x - 10}
-                        y={loadBoxY - 8}
+                        x={x + 14}
+                        y={mcbBoxY + 106}
+                        textAnchor="start"
                         fill="#0F172A"
-                        fontSize={10.5}
+                        fontSize={11.5}
                         fontWeight="bold"
                         fontFamily="JetBrains Mono, monospace"
-                        transform={`rotate(-90, ${x - 10}, ${loadBoxY - 8})`}
+                        transform={`rotate(90, ${x + 14}, ${mcbBoxY + 106})`}
                       >
                         {c.cable} ({c.cableLengthM || 15}m)
                       </text>
 
+                      {/* Vertical Terminal Load Box oriented TOP-TO-BOTTOM (rotate(90)) */}
                       <rect
-                        x={x - 56}
+                        x={x - 34}
                         y={loadBoxY}
-                        width={112}
-                        height={74}
+                        width={68}
+                        height={310}
                         rx={4}
                         fill={isCircuitSelected ? '#EFF6FF' : '#FFFFFF'}
                         stroke={isCircuitSelected ? '#0066FF' : '#000000'}
                         strokeWidth={1.8}
                       />
-                      <text x={x} y={loadBoxY + 19} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                        {nameLines[0]}
+                      <text
+                        x={x + 14}
+                        y={loadBoxY + 16}
+                        textAnchor="start"
+                        fill="#000000"
+                        fontSize={13.5}
+                        fontWeight="bold"
+                        fontFamily="Plus Jakarta Sans, sans-serif"
+                        transform={`rotate(90, ${x + 14}, ${loadBoxY + 16})`}
+                      >
+                        {c.label} — {c.name}
                       </text>
-                      {nameLines[1] && (
-                        <text x={x} y={loadBoxY + 34} textAnchor="middle" fill="#000000" fontSize={11} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                          {nameLines[1]}
-                        </text>
-                      )}
-                      <text x={x} y={loadBoxY + 50} textAnchor="middle" fill="#334155" fontSize={10} fontWeight="bold" fontFamily="Plus Jakarta Sans, sans-serif">
-                        {c.category.length > 16 ? `${c.category.slice(0, 15)}…` : c.category}
+                      <text
+                        x={x - 1}
+                        y={loadBoxY + 16}
+                        textAnchor="start"
+                        fill="#334155"
+                        fontSize={11.5}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${x - 1}, ${loadBoxY + 16})`}
+                      >
+                        {c.category} • {c.characteristic}{c.ratedCurrent}A ({c.poles})
                       </text>
-                      <text x={x} y={loadBoxY + 66} textAnchor="middle" fill="#000000" fontSize={11.5} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
-                        P = {c.powerKw.toFixed(2)} kW
+                      <text
+                        x={x - 16}
+                        y={loadBoxY + 16}
+                        textAnchor="start"
+                        fill="#0369A1"
+                        fontSize={12}
+                        fontWeight="bold"
+                        fontFamily="JetBrains Mono, monospace"
+                        transform={`rotate(90, ${x - 16}, ${loadBoxY + 16})`}
+                      >
+                        P = {c.powerKw.toFixed(2)} kW • {c.phase}
                       </text>
                     </g>
                   );

@@ -925,7 +925,7 @@ export function App() {
                 </div>
               </div>
 
-              <div className="h-[520px] sm:h-[640px] lg:h-[740px] print:h-auto bg-white rounded-2xl border border-slate-200 print:border-0 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
+              <div className="min-h-[760px] h-auto bg-white rounded-2xl border border-slate-200 print:border-0 shadow-sm print:shadow-none overflow-hidden print:overflow-visible">
                 <ElectricalSchemaCanvas
                   project={activeProject}
                   displayMode={displayMode}

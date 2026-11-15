@@ -557,67 +557,89 @@ export async function renderCleanSchemaPagesToCanvases(
     const contentW = pageW - margin * 2;
     const canvases: HTMLCanvasElement[] = [];
 
-    // 1. Rasterize SVG at full A4 Portrait content width so zero text shrinks
+    // 1. Rasterize SVG at full A4 Portrait resolution so zero text shrinks
     if (svgRendered) {
-      const targetW = contentW;
-      const targetH = Math.max(
-        400,
-        Math.round((svgRendered.height / svgRendered.width) * targetW)
-      );
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = targetW;
-      offCanvas.height = targetH;
-      const offCtx = offCanvas.getContext('2d')!;
-      offCtx.fillStyle = '#FFFFFF';
-      offCtx.fillRect(0, 0, targetW, targetH);
-      offCtx.drawImage(svgRendered.img, 0, 0, targetW, targetH);
-
-      // Probe body height using temporary page geometry
-      const headerH = 152;
-      const footerStampH = 118;
-      const maxSchematicH = pageH - margin - headerH - 20 - 20 - footerStampH - margin;
-      const slices = computeCleanSchematicSlices(offCanvas, maxSchematicH);
-
-      slices.forEach((slice, sliceIdx) => {
+      const aspect = svgRendered.height / Math.max(1, svgRendered.width);
+      if (aspect <= 1.5) {
+        // Single unified A4 Portrait schematic (1000 x 1414) — render full-page on Page 1
         const pageCanvas = document.createElement('canvas');
         pageCanvas.width = pageW;
         pageCanvas.height = pageH;
         const pCtx = pageCanvas.getContext('2d')!;
-
-        const subtitle =
-          slices.length > 1
-            ? `ELEKTRICKÁ SCHÉMA ROZVÁDZAČA (ČASŤ ${sliceIdx + 1}/${slices.length}) • STN EN 61439-3`
-            : 'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617';
-
-        const { bodyTopY } = drawPortraitA4Chrome(
-          pCtx,
-          project,
-          pageW,
-          pageH,
-          margin,
-          subtitle,
-          `${paperFormat} NA VÝŠKU`
-        );
-
         pCtx.fillStyle = '#FFFFFF';
-        pCtx.fillRect(margin, bodyTopY, contentW, slice.sh);
-        pCtx.drawImage(
-          offCanvas,
-          0,
-          slice.sy,
-          targetW,
-          slice.sh,
-          margin,
-          bodyTopY,
-          contentW,
-          slice.sh
-        );
-        pCtx.strokeStyle = '#000000';
-        pCtx.lineWidth = 2.5;
-        pCtx.strokeRect(margin, bodyTopY, contentW, slice.sh);
+        pCtx.fillRect(0, 0, pageW, pageH);
 
+        const pad = 20;
+        const availW = pageW - pad * 2;
+        const availH = pageH - pad * 2;
+        const scale = Math.min(availW / svgRendered.width, availH / svgRendered.height);
+        const drawW = Math.round(svgRendered.width * scale);
+        const drawH = Math.round(svgRendered.height * scale);
+        const drawX = Math.round((pageW - drawW) / 2);
+        const drawY = Math.round((pageH - drawH) / 2);
+
+        pCtx.drawImage(svgRendered.img, drawX, drawY, drawW, drawH);
         canvases.push(pageCanvas);
-      });
+      } else {
+        const targetW = contentW;
+        const targetH = Math.max(
+          400,
+          Math.round((svgRendered.height / svgRendered.width) * targetW)
+        );
+        const offCanvas = document.createElement('canvas');
+        offCanvas.width = targetW;
+        offCanvas.height = targetH;
+        const offCtx = offCanvas.getContext('2d')!;
+        offCtx.fillStyle = '#FFFFFF';
+        offCtx.fillRect(0, 0, targetW, targetH);
+        offCtx.drawImage(svgRendered.img, 0, 0, targetW, targetH);
+
+        const headerH = 152;
+        const footerStampH = 118;
+        const maxSchematicH = pageH - margin - headerH - 20 - 20 - footerStampH - margin;
+        const slices = computeCleanSchematicSlices(offCanvas, maxSchematicH);
+
+        slices.forEach((slice, sliceIdx) => {
+          const pageCanvas = document.createElement('canvas');
+          pageCanvas.width = pageW;
+          pageCanvas.height = pageH;
+          const pCtx = pageCanvas.getContext('2d')!;
+
+          const subtitle =
+            slices.length > 1
+              ? `ELEKTRICKÁ SCHÉMA ROZVÁDZAČA (ČASŤ ${sliceIdx + 1}/${slices.length}) • STN EN 61439-3`
+              : 'ELEKTRICKÁ SCHÉMA ROZVÁDZAČA • STN EN 61439-3 / STN EN 60617';
+
+          const { bodyTopY } = drawPortraitA4Chrome(
+            pCtx,
+            project,
+            pageW,
+            pageH,
+            margin,
+            subtitle,
+            `${paperFormat} NA VÝŠKU`
+          );
+
+          pCtx.fillStyle = '#FFFFFF';
+          pCtx.fillRect(margin, bodyTopY, contentW, slice.sh);
+          pCtx.drawImage(
+            offCanvas,
+            0,
+            slice.sy,
+            targetW,
+            slice.sh,
+            margin,
+            bodyTopY,
+            contentW,
+            slice.sh
+          );
+          pCtx.strokeStyle = '#000000';
+          pCtx.lineWidth = 2.5;
+          pCtx.strokeRect(margin, bodyTopY, contentW, slice.sh);
+
+          canvases.push(pageCanvas);
+        });
+      }
     } else {
       const pageCanvas = document.createElement('canvas');
       pageCanvas.width = pageW;
