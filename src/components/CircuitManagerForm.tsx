@@ -73,11 +73,11 @@ export const CircuitManagerForm: React.FC<CircuitManagerFormProps> = ({ project,
         manufacturer: mfg,
         model: suggestCircuitBreakerModel(mfg, '1P', 'B', 10),
       };
-    } else if (preset === 'cooktop' && is3f) {
+    } else if (preset === 'cooktop') {
       newCircuit = {
         id: `c-${Date.now()}-${nextIdx}`,
         label: `FA${nextIdx}`,
-        name: 'Indukčná varná doska (400 V)',
+        name: 'Indukčná varná doska / 3F okruh (B16 3P)',
         category: 'Kuchyňa / Spotrebiče',
         rcdId: defaultRcd,
         poles: '3P',
@@ -86,7 +86,7 @@ export const CircuitManagerForm: React.FC<CircuitManagerFormProps> = ({ project,
         breakingCapacity: '10 kA',
         phase: 'L1,L2,L3',
         cable: 'CYKY-J 5x2,5 mm²',
-        powerKw: 7.2,
+        powerKw: 5.5,
         manufacturer: mfg,
         model: suggestCircuitBreakerModel(mfg, '3P', 'B', 16),
       };
@@ -232,16 +232,14 @@ export const CircuitManagerForm: React.FC<CircuitManagerFormProps> = ({ project,
               <Plus className="w-3.5 h-3.5" />
               Osvetlenie (B10 / 1,5 mm²)
             </button>
-            {project.phaseCount === 3 && (
-              <button
-                type="button"
-                onClick={() => addQuickCircuit('cooktop')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-md hover:bg-slate-200 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Varná doska 400V (3P B16)
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => addQuickCircuit('cooktop')}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-md hover:bg-slate-200 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              3F istič / Varná doska (3P B16)
+            </button>
             <button
               type="button"
               onClick={() => addQuickCircuit('heating')}
@@ -364,8 +362,8 @@ export const CircuitManagerForm: React.FC<CircuitManagerFormProps> = ({ project,
                 >
                   <option value="1P">1P</option>
                   <option value="2P">2P</option>
-                  {project.phaseCount === 3 && <option value="3P">3P</option>}
-                  {project.phaseCount === 3 && <option value="4P">4P</option>}
+                  <option value="3P">3P</option>
+                  <option value="4P">4P</option>
                 </select>
               </div>
 
@@ -412,17 +410,16 @@ export const CircuitManagerForm: React.FC<CircuitManagerFormProps> = ({ project,
                 <label className="block text-xs font-medium text-slate-600 mb-1">Fáza</label>
                 <select
                   aria-label={`Fáza pre ${c.label}`}
-                  disabled={project.phaseCount === 1 || c.poles === '3P' || c.poles === '4P'}
                   value={c.phase}
                   onChange={(e) =>
                     updateCircuit(c.id, { phase: e.target.value as PhaseAllocation })
                   }
-                  className="w-full px-1.5 py-1.5 text-xs font-mono bg-slate-50 border border-slate-300 rounded text-slate-900 disabled:opacity-60"
+                  className="w-full px-1.5 py-1.5 text-xs font-mono bg-slate-50 border border-slate-300 rounded text-slate-900"
                 >
                   <option value="L1">L1</option>
-                  {project.phaseCount === 3 && <option value="L2">L2</option>}
-                  {project.phaseCount === 3 && <option value="L3">L3</option>}
-                  {project.phaseCount === 3 && <option value="L1,L2,L3">L1-3</option>}
+                  <option value="L2">L2</option>
+                  <option value="L3">L3</option>
+                  <option value="L1,L2,L3">L1-3 (3F)</option>
                 </select>
               </div>
 

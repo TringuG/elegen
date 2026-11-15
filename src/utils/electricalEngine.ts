@@ -201,6 +201,35 @@ export function getPolesModuleCount(poles: PolesType | RcdPoles): number {
   }
 }
 
+export function isDoorbellCircuit(c: { name: string }): boolean {
+  const lower = (c.name || '').toLowerCase();
+  return lower.includes('zvonček') || lower.includes('zvoncek');
+}
+
+export function suggestDoorbellModel(manufacturer: Manufacturer): {
+  model: string;
+  catalogNumber: string;
+} {
+  switch (manufacturer) {
+    case 'Eaton':
+      return { model: 'ASG-230 (Zvonček 230V)', catalogNumber: '265543' };
+    case 'Schneider Electric':
+      return { model: 'Acti9 iSO 230V', catalogNumber: 'A9A15320' };
+    case 'OEZ':
+      return { model: 'Minia ZV-230', catalogNumber: '38215' };
+    case 'Hager':
+      return { model: 'SU213 (230V AC)', catalogNumber: 'SU213' };
+    case 'ABB':
+      return { model: 'TSM 230V (Zvonček)', catalogNumber: '2CSM111000R0811' };
+    case 'Legrand':
+      return { model: '004101 (Zvonček 230V)', catalogNumber: '004101' };
+    case 'Schrack Technik':
+      return { model: 'BZ326502 (Zvonček 230V)', catalogNumber: 'BZ326502' };
+    default:
+      return { model: 'ASG-230 (Zvonček 230V)', catalogNumber: '265543' };
+  }
+}
+
 export function suggestInternalMainDeviceModel(
   manufacturer: Manufacturer,
   deviceType: InternalMainDeviceType,
@@ -481,7 +510,10 @@ export function balanceCircuitPhases(project: SwitchboardProject): SwitchboardPr
   if (project.phaseCount === 1) {
     return {
       ...project,
-      circuits: project.circuits.map((c) => ({ ...c, phase: 'L1' })),
+      circuits: project.circuits.map((c) => ({
+        ...c,
+        phase: c.poles === '3P' || c.poles === '4P' || c.phase === 'L1,L2,L3' ? 'L1,L2,L3' : 'L1',
+      })),
     };
   }
 
@@ -1220,6 +1252,22 @@ export function calculateDinRailAllocation(project: SwitchboardProject): DinRail
           model: c.model,
           rcdGroupLabel: rcd.label,
         });
+        if (isDoorbellCircuit(c)) {
+          const bell = suggestDoorbellModel(c.manufacturer);
+          slots.push({
+            id: `${c.id}-bell`,
+            label: 'ZV1',
+            sublabel: 'Zvonček 230 V AC (DIN)',
+            type: 'mcb',
+            poles: '1P',
+            modules: 1,
+            ratingText: '230 V AC',
+            phaseText: c.phase === 'L1,L2,L3' ? 'L1' : c.phase,
+            manufacturer: c.manufacturer,
+            model: bell.model,
+            rcdGroupLabel: rcd.label,
+          });
+        }
       });
     } else {
       slots.push({
@@ -1251,6 +1299,22 @@ export function calculateDinRailAllocation(project: SwitchboardProject): DinRail
           model: c.model,
           rcdGroupLabel: rcd.label,
         });
+        if (isDoorbellCircuit(c)) {
+          const bell = suggestDoorbellModel(c.manufacturer);
+          slots.push({
+            id: `${c.id}-bell`,
+            label: 'ZV1',
+            sublabel: 'Zvonček 230 V AC (DIN)',
+            type: 'mcb',
+            poles: '1P',
+            modules: 1,
+            ratingText: '230 V AC',
+            phaseText: c.phase === 'L1,L2,L3' ? 'L1' : c.phase,
+            manufacturer: c.manufacturer,
+            model: bell.model,
+            rcdGroupLabel: rcd.label,
+          });
+        }
       });
     }
   });
@@ -1273,6 +1337,22 @@ export function calculateDinRailAllocation(project: SwitchboardProject): DinRail
       model: c.model,
       rcdGroupLabel: 'Bez RCD',
     });
+    if (isDoorbellCircuit(c)) {
+      const bell = suggestDoorbellModel(c.manufacturer);
+      slots.push({
+        id: `${c.id}-bell`,
+        label: 'ZV1',
+        sublabel: 'Zvonček 230 V AC (DIN)',
+        type: 'mcb',
+        poles: '1P',
+        modules: 1,
+        ratingText: '230 V AC',
+        phaseText: c.phase === 'L1,L2,L3' ? 'L1' : c.phase,
+        manufacturer: c.manufacturer,
+        model: bell.model,
+        rcdGroupLabel: 'Bez RCD',
+      });
+    }
   });
 
   const totalUsedModules = slots.reduce((sum, s) => sum + s.modules, 0);
@@ -1431,7 +1511,7 @@ export function generateBom(project: SwitchboardProject): BomItem[] {
     });
   });
 
-  project.circuits.forEach((c) => {
+  project.circuits.forEach((c, cIdx) => {
     items.push({
       code: c.label,
       designation: `Istič obvodu – ${c.name}`,
@@ -1445,6 +1525,20 @@ export function generateBom(project: SwitchboardProject): BomItem[] {
       modules: getPolesModuleCount(c.poles),
       quantity: 1,
     });
+    if (isDoorbellCircuit(c)) {
+      const bell = suggestDoorbellModel(c.manufacturer);
+      items.push({
+        code: `ZV${cIdx + 1}`,
+        designation: `Modulárny zvonček 230 V AC na DIN lištu (${c.name})`,
+        category: 'Signalizácia / Zvonček 230 V',
+        description: 'Modulárny domový zvonček 230 V / 50 Hz na DIN lištu (1 modul, 85 dB)',
+        manufacturer: c.manufacturer,
+        model: bell.model,
+        catalogNumber: bell.catalogNumber,
+        modules: 1,
+        quantity: 1,
+      });
+    }
   });
 
   return items;
@@ -2258,6 +2352,60 @@ export const INITIAL_COMPONENT_LIBRARY: CatalogProduct[] = [
     powerLossW: 0.4,
     maxTerminalCrossSectionMm2: '2,5 – 25 mm²',
     datasheetSummary: 'Štvorpólový zvodič prepätia triedy T2 (C) pre podružné a bytové rozvádzače.',
+  },
+  {
+    id: 'lib-eaton-pl7-b16-3',
+    manufacturer: 'Eaton',
+    catalogNumber: '263015',
+    model: 'PL7-B16/3',
+    name: 'Modulárny istič 3P B16A 10kA (3-fázový)',
+    deviceType: 'MCB (Istič)',
+    poles: '3P',
+    ratedCurrent: 16,
+    characteristic: 'B',
+    breakingCapacity: '10 kA',
+    modules: 3,
+    voltage: '230/400 V AC',
+    standard: 'STN EN 60898-1',
+    powerLossW: 6.2,
+    maxTerminalCrossSectionMm2: '1 – 25 mm²',
+    datasheetSummary: 'Trojfázový istič B16A (3P) pre varnú dosku, motorové zásuvky 400 V alebo prípravu 3F vývodu aj v 1F rozvádzači.',
+  },
+  {
+    id: 'lib-eaton-asg-230',
+    manufacturer: 'Eaton',
+    catalogNumber: '265543',
+    model: 'ASG-230 (Zvonček 230V)',
+    name: 'Zvonček 230 V AC na DIN lištu (1M)',
+    deviceType: 'Modulárny zvonček 230 V',
+    poles: '1P',
+    ratedCurrent: 6,
+    characteristic: 'B',
+    breakingCapacity: '10 kA',
+    modules: 1,
+    voltage: '230 V AC',
+    standard: 'STN EN 62080',
+    powerLossW: 0.8,
+    maxTerminalCrossSectionMm2: '1 – 10 mm²',
+    datasheetSummary: 'Modulárny domový zvonček 230 V / 50 Hz priamo na DIN lištu do rozvádzača (šírka 1 modul, hlasitosť 85 dB).',
+  },
+  {
+    id: 'lib-legrand-004101-bell',
+    manufacturer: 'Legrand',
+    catalogNumber: '004101',
+    model: '004101 (Zvonček 230V)',
+    name: 'Modulárny zvonček Legrand 230 V AC (1M)',
+    deviceType: 'Modulárny zvonček 230 V',
+    poles: '1P',
+    ratedCurrent: 6,
+    characteristic: 'B',
+    breakingCapacity: '10 kA',
+    modules: 1,
+    voltage: '230 V AC',
+    standard: 'STN EN 62080',
+    powerLossW: 0.8,
+    maxTerminalCrossSectionMm2: '1 – 10 mm²',
+    datasheetSummary: 'Modulárny zvonček 230 V AC na DIN lištu, priame napájanie 230 V bez externého transformátora.',
   },
 ];
 

@@ -55,6 +55,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  Bell,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -345,6 +346,70 @@ export const StepByStepWizardView: React.FC<Props> = ({
     setEditingCircuitId(newCircuit.id);
   };
 
+  const handleAdd3PhaseCircuit = () => {
+    const nextIdx = project.circuits.length + 1;
+    const mfg = project.mainBreaker.manufacturer;
+    const defaultRcdId = project.rcds.find((r) => r.deviceKind === 'RCCB')?.id ?? project.rcds[0]?.id ?? 'NONE';
+
+    const newCircuit: CircuitConfig = {
+      id: `circ-3p-${Date.now()}`,
+      label: `FA${nextIdx}`,
+      name: `3-fázový okruh / Varná doska č. ${nextIdx}`,
+      category: 'Kuchyňa / Spotrebiče',
+      poles: '3P',
+      ratedCurrent: 16,
+      characteristic: 'B',
+      breakingCapacity: '10 kA',
+      rcdId: defaultRcdId,
+      cable: 'CYKY-J 5x2,5 mm²',
+      powerKw: 5.5,
+      phase: 'L1,L2,L3',
+      cableLengthM: 15,
+      installationMethod: 'B1 (v inštalačnej rúre v stene)',
+      cosPhi: 0.95,
+      manufacturer: mfg,
+      model: suggestCircuitBreakerModel(mfg, '3P', 'B', 16),
+    };
+
+    onProjectChange(
+      { ...project, circuits: [...project.circuits, newCircuit] },
+      `Pridaný 3-fázový istič B16 (3P) ${newCircuit.label}`
+    );
+    setEditingCircuitId(newCircuit.id);
+  };
+
+  const handleAddDoorbellCircuit = () => {
+    const nextIdx = project.circuits.length + 1;
+    const mfg = project.mainBreaker.manufacturer;
+    const defaultRcdId = project.rcds.find((r) => r.deviceKind === 'RCCB')?.id ?? project.rcds[0]?.id ?? 'NONE';
+
+    const newCircuit: CircuitConfig = {
+      id: `circ-bell-${Date.now()}`,
+      label: `FA${nextIdx}`,
+      name: 'Zvonček 230 V (modulárny na DIN)',
+      category: 'Osvetlenie',
+      poles: '1P',
+      ratedCurrent: 6,
+      characteristic: 'B',
+      breakingCapacity: '10 kA',
+      rcdId: defaultRcdId,
+      cable: 'CYKY-J 3x1,5 mm²',
+      powerKw: 0.02,
+      phase: 'L1',
+      cableLengthM: 12,
+      installationMethod: 'B1 (v inštalačnej rúre v stene)',
+      cosPhi: 0.95,
+      manufacturer: mfg,
+      model: suggestCircuitBreakerModel(mfg, '1P', 'B', 6),
+    };
+
+    onProjectChange(
+      { ...project, circuits: [...project.circuits, newCircuit] },
+      `Pridaný prvok Zvonček 230 V (${newCircuit.label})`
+    );
+    setEditingCircuitId(newCircuit.id);
+  };
+
   const handleDuplicateCircuit = (circuitId: string) => {
     const source = project.circuits.find((c) => c.id === circuitId);
     if (!source) return;
@@ -602,7 +667,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
               className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600 hover:text-blue-600 transition-colors"
             >
               <Settings className="w-4 h-4" />
-              <span>Rozšírené nastavenia (Prívodný kábel, Krytie IP, Projektant)</span>
+              <span>Rozšírené nastavenia (Prívodný kábel, Montáž skrine, Krytie IP)</span>
               {showBasicAdvanced ? (
                 <ChevronUp className="w-4 h-4" />
               ) : (
@@ -665,19 +730,6 @@ export const StepByStepWizardView: React.FC<Props> = ({
                     <option value="IP54">IP54 (Vlhkosť / Garáž / Technická m.)</option>
                     <option value="IP65">IP65 (Exteriér / Prachotesné)</option>
                   </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Zodpovedný projektant
-                  </label>
-                  <input
-                    type="text"
-                    value={project.designerName}
-                    onChange={(e) =>
-                      onProjectChange({ ...project, designerName: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-sm text-slate-900"
-                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -2171,12 +2223,36 @@ export const StepByStepWizardView: React.FC<Props> = ({
                 type="button"
                 onClick={() => {
                   setShowAutoImportPanel(false);
+                  handleAddDoorbellCircuit();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                title="Pridať prvok Zvonček 230 V (modulárny na DIN lištu + istič B6A)"
+              >
+                <Bell className="w-4 h-4" />
+                + ZVONČEK 230 V
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutoImportPanel(false);
+                  handleAdd3PhaseCircuit();
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                title="Pridať 3-fázový istič (napr. B16 3P) do 1-fázovej alebo 3-fázovej sústavy"
+              >
+                <Plus className="w-4 h-4" />
+                + 3F ISTIČ (B16 3P)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAutoImportPanel(false);
                   handleAddCircuit();
                 }}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0066FF] hover:bg-[#2563EB] text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                PRIDAŤ OKRUH
+                PRIDAŤ OKRUH (1F)
               </button>
             </div>
           </div>
@@ -2295,6 +2371,10 @@ export const StepByStepWizardView: React.FC<Props> = ({
                                       : c.phase === 'L1,L2,L3'
                                       ? 'L1'
                                       : c.phase;
+                                  const nextCable =
+                                    nextPoles === '3P' || nextPoles === '4P'
+                                      ? c.cable.replace('3x', '5x')
+                                      : c.cable.replace('5x', '3x');
                                   onProjectChange({
                                     ...project,
                                     circuits: project.circuits.map((item) =>
@@ -2303,6 +2383,7 @@ export const StepByStepWizardView: React.FC<Props> = ({
                                             ...item,
                                             poles: nextPoles,
                                             phase: nextPhase,
+                                            cable: nextCable,
                                             model: suggestCircuitBreakerModel(
                                               item.manufacturer,
                                               nextPoles,
@@ -2314,33 +2395,54 @@ export const StepByStepWizardView: React.FC<Props> = ({
                                     ),
                                   });
                                 }}
-                                className="w-16 px-2 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono font-semibold text-slate-900"
+                                className="w-20 px-2 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm font-mono font-semibold text-slate-900"
                               >
                                 <option value="1P">1P</option>
                                 <option value="2P">2P</option>
-                                {project.phaseCount === 3 && <option value="3P">3P</option>}
-                                {project.phaseCount === 3 && <option value="4P">4P</option>}
+                                <option value="3P">3P (3F)</option>
+                                <option value="4P">4P (3F+N)</option>
                               </select>
                               <select
                                 value={c.phase}
-                                onChange={(e) =>
+                                onChange={(e) => {
+                                  const nextPhase = e.target.value as PhaseAllocation;
+                                  const nextPoles: PolesType =
+                                    nextPhase === 'L1,L2,L3' && c.poles === '1P'
+                                      ? '3P'
+                                      : nextPhase !== 'L1,L2,L3' &&
+                                        (c.poles === '3P' || c.poles === '4P')
+                                      ? '1P'
+                                      : c.poles;
+                                  const nextCable =
+                                    nextPoles === '3P' || nextPoles === '4P'
+                                      ? c.cable.replace('3x', '5x')
+                                      : c.cable.replace('5x', '3x');
                                   onProjectChange({
                                     ...project,
                                     circuits: project.circuits.map((item) =>
                                       item.id === c.id
-                                        ? { ...item, phase: e.target.value as PhaseAllocation }
+                                        ? {
+                                            ...item,
+                                            phase: nextPhase,
+                                            poles: nextPoles,
+                                            cable: nextCable,
+                                            model: suggestCircuitBreakerModel(
+                                              item.manufacturer,
+                                              nextPoles,
+                                              item.characteristic,
+                                              item.ratedCurrent
+                                            ),
+                                          }
                                         : item
                                     ),
-                                  })
-                                }
+                                  });
+                                }}
                                 className="flex-1 px-2 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs font-mono font-bold text-slate-900"
                               >
                                 <option value="L1">L1</option>
-                                {project.phaseCount === 3 && <option value="L2">L2</option>}
-                                {project.phaseCount === 3 && <option value="L3">L3</option>}
-                                {project.phaseCount === 3 && (
-                                  <option value="L1,L2,L3">L1,L2,L3</option>
-                                )}
+                                <option value="L2">L2</option>
+                                <option value="L3">L3</option>
+                                <option value="L1,L2,L3">L1,L2,L3 (3F)</option>
                               </select>
                             </div>
                           </div>

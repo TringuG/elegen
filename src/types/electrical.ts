@@ -327,7 +327,8 @@ export interface CatalogProduct {
     | 'RCBO (Ističochránič)'
     | 'SPD (Prepäťová ochrana)'
     | 'Hlavný vypínač'
-    | 'AFDD (Oblúková ochrana)';
+    | 'AFDD (Oblúková ochrana)'
+    | 'Modulárny zvonček 230 V';
   poles: PolesType;
   ratedCurrent: number;
   characteristic?: BreakerCharacteristic;

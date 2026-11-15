@@ -78,7 +78,7 @@ export const ProfessionalExportView: React.FC<Props> = ({
                 Nastavenia aplikácie a projekčného prostredia
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Predvolené údaje projektanta do rozpisky výkresu, normatívne parametre siete a správa lokálnej databázy.
+                Predvolené údaje projektu do rozpisky výkresu, normatívne parametre siete a správa lokálnej databázy.
               </p>
             </div>
           </div>
@@ -94,25 +94,6 @@ export const ProfessionalExportView: React.FC<Props> = ({
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-            <label className="space-y-1.5">
-              <span className="text-slate-700 font-bold uppercase tracking-wider">
-                Zodpovedný projektant / Projekčná kancelária
-              </span>
-              <input
-                type="text"
-                value={project.designerName}
-                onChange={(e) =>
-                  onProjectChange(
-                    {
-                      ...project,
-                      designerName: e.target.value,
-                    },
-                    'Zmena mena projektanta'
-                  )
-                }
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 font-medium focus:bg-white focus:border-[#0066FF] focus:outline-none"
-              />
-            </label>
 
             <label className="space-y-1.5">
               <span className="text-slate-700 font-bold uppercase tracking-wider">
@@ -1015,11 +996,13 @@ export const ProfessionalExportView: React.FC<Props> = ({
           <div className="border-2 border-slate-900 grid grid-cols-1 md:grid-cols-4 text-xs">
             <div className="p-3 border-b md:border-b-0 md:border-r border-slate-900">
               <div className="text-[10px] uppercase text-slate-500 font-bold">
-                Zodpovedný projektant:
+                Objekt / Miesto inštalácie:
               </div>
-              <div className="font-bold text-slate-900 mt-0.5">{project.designerName}</div>
+              <div className="font-bold text-slate-900 mt-0.5">
+                {project.objectType} • {project.locationCity || 'Slovensko'}
+              </div>
               <div className="text-[10px] text-slate-500 mt-2">
-                Miesto stavby: {project.locationCity || 'Bratislava'}
+                Krytie: {project.ipRating} • {project.enclosureMounting}
               </div>
             </div>
             <div className="p-3 border-b md:border-b-0 md:border-r border-slate-900">

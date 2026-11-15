@@ -333,13 +333,17 @@ function drawPortraitA4Chrome(
 
   ctx.fillStyle = '#334155';
   ctx.font = 'bold 16px "JetBrains Mono", monospace';
-  ctx.fillText('ZODPOVEDNÝ PROJEKTANT:', margin + 18, stampY + 29);
+  ctx.fillText('OBJEKT / MIESTO INŠTALÁCIE:', margin + 18, stampY + 29);
   ctx.fillText('NÁZOV VÝKRESU / ROZVÁDZAČA:', margin + col1W + 18, stampY + 29);
   ctx.fillText('VÝKRES / FORMÁT / REVÍZIA:', margin + col1W + col2W + 18, stampY + 29);
 
   ctx.fillStyle = '#000000';
   ctx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText(fitText(ctx, project.designerName, col1W - 34), margin + 18, stampY + 66);
+  ctx.fillText(
+    fitText(ctx, `${project.objectType} • ${project.locationCity || 'Slovensko'}`, col1W - 34),
+    margin + 18,
+    stampY + 66
+  );
   ctx.fillText(fitText(ctx, project.name, col2W - 34), margin + col1W + 18, stampY + 66);
   ctx.font = 'bold 21px "JetBrains Mono", monospace';
   ctx.fillText(
@@ -351,7 +355,7 @@ function drawPortraitA4Chrome(
   ctx.fillStyle = '#1E293B';
   ctx.font = '600 18px "Plus Jakarta Sans", sans-serif';
   ctx.fillText(
-    fitText(ctx, `Miesto: ${project.locationCity || 'Bratislava'}`, col1W - 34),
+    fitText(ctx, `Krytie: ${project.ipRating} • ${project.enclosureMounting}`, col1W - 34),
     margin + 18,
     stampY + 99
   );
@@ -921,14 +925,18 @@ export async function renderCleanSchemaPagesToCanvases(
 
     targetCtx.fillStyle = '#334155';
     targetCtx.font = 'bold 15px "JetBrains Mono", monospace';
-    targetCtx.fillText('ZODPOVEDNÝ PROJEKTANT:', margin + 18, stampY + 28);
+    targetCtx.fillText('OBJEKT / MIESTO INŠTALÁCIE:', margin + 18, stampY + 28);
     targetCtx.fillText('NÁZOV VÝKRESU / ROZVÁDZAČA:', margin + 620 + 18, stampY + 28);
     targetCtx.fillText('ČÍSLO VÝKRESU / FORMÁT:', margin + 1380 + 18, stampY + 28);
     targetCtx.fillText('ODBORNÉ OVERENIE (STN 33 2000-6):', margin + 1820 + 18, stampY + 28);
 
     targetCtx.fillStyle = '#000000';
     targetCtx.font = 'bold 21px "Plus Jakarta Sans", sans-serif';
-    targetCtx.fillText(fitText(targetCtx, project.designerName, 580), margin + 18, stampY + 60);
+    targetCtx.fillText(
+      fitText(targetCtx, `${project.objectType} • ${project.locationCity || 'Slovensko'}`, 580),
+      margin + 18,
+      stampY + 60
+    );
     targetCtx.fillText(fitText(targetCtx, project.name, 720), margin + 620 + 18, stampY + 60);
     targetCtx.font = 'bold 20px "JetBrains Mono", monospace';
     targetCtx.fillText(
@@ -940,7 +948,7 @@ export async function renderCleanSchemaPagesToCanvases(
     targetCtx.fillStyle = '#1E293B';
     targetCtx.font = '600 16px "Plus Jakarta Sans", sans-serif';
     targetCtx.fillText(
-      `Miesto stavby: ${project.locationCity || 'Bratislava'}`,
+      fitText(targetCtx, `Krytie: ${project.ipRating} • ${project.enclosureMounting}`, 580),
       margin + 18,
       stampY + 88
     );

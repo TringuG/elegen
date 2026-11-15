@@ -100,7 +100,9 @@ function detectCategoryFromName(name: string): {
     lower.includes('svetl') ||
     lower.includes('osvetl') ||
     lower.includes('led') ||
-    lower.includes('lamp')
+    lower.includes('lamp') ||
+    lower.includes('zvonček') ||
+    lower.includes('zvoncek')
   ) {
     return { category: 'Osvetlenie', status: 'recognized' };
   }
@@ -297,9 +299,9 @@ export function parseCircuitListText(rawInput: string): AutoImportParseResult {
     let polesStatus: FieldStatus = 'suggested';
     let isThreePhase = false;
 
-    if (/\b(3\s*P|3\s*pól|3-pól|3F|400\s*V|5\s*[x×]\s*\d)/i.test(working)) {
+    if (/\b(3\s*P|3\s*pól|3-pól|3F|3\s*faz|3-faz|3\s*fáz|3-fáz|400\s*V|5\s*[x×]\s*\d)/i.test(working)) {
       poles = '3P';
-      polesStatus = /\b3\s*P\b/i.test(working) ? 'recognized' : 'suggested';
+      polesStatus = /\b(3\s*P|3\s*faz|3-faz|3\s*fáz|3-fáz|3F)\b/i.test(working) ? 'recognized' : 'suggested';
       isThreePhase = true;
     } else if (/\b(1\s*P|230\s*V|3\s*[x×]\s*\d)/i.test(working)) {
       poles = '1P';
@@ -648,7 +650,7 @@ export function applyImportedCircuitsToProject(
       ratedCurrent: d.ratedCurrent,
       characteristic: d.characteristic,
       breakingCapacity: '10 kA' as BreakingCapacity,
-      phase: is3f ? d.phase : 'L1',
+      phase: is3f || d.poles === '3P' || d.poles === '4P' ? d.phase : 'L1',
       cable: d.cableType,
       cableLengthM: 18,
       installationMethod: 'B1 (v inštalačnej rúre v stene)',

@@ -373,18 +373,23 @@ export const SmartValidationAndComponentLibraryView: React.FC<Props> = ({
   });
 
   const handleInsertIntoProject = (product: CatalogProduct) => {
-    if (product.deviceType === 'MCB (Istič)' || product.deviceType === 'AFDD (Oblúková ochrana)') {
+    if (
+      product.deviceType === 'MCB (Istič)' ||
+      product.deviceType === 'AFDD (Oblúková ochrana)' ||
+      product.deviceType === 'Modulárny zvonček 230 V'
+    ) {
       const nextNum = project.circuits.length + 1;
       const defaultRcd =
         project.rcds.find((r) => r.deviceKind === 'RCCB')?.id || project.rcds[0]?.id || 'NONE';
+      const isBell = product.deviceType === 'Modulárny zvonček 230 V';
       const newCircuit = {
         id: `c-lib-${Date.now()}`,
         label: `FA${nextNum}`,
-        name: `${product.name}`,
-        category: 'Zásuvky' as const,
+        name: isBell ? 'Zvonček 230 V (modulárny na DIN)' : `${product.name}`,
+        category: (isBell ? 'Osvetlenie' : 'Zásuvky') as 'Osvetlenie' | 'Zásuvky',
         rcdId: defaultRcd,
         poles: product.poles,
-        ratedCurrent: (product.ratedCurrent as 6 | 10 | 13 | 16 | 20 | 25 | 32 | 40 | 50 | 63) || 16,
+        ratedCurrent: (product.ratedCurrent as 6 | 10 | 13 | 16 | 20 | 25 | 32 | 40 | 50 | 63) || (isBell ? 6 : 16),
         characteristic: product.characteristic || 'B',
         breakingCapacity: product.breakingCapacity || '10 kA',
         phase: (product.poles === '3P' || product.poles === '4P' ? 'L1,L2,L3' : 'L1') as
@@ -393,13 +398,13 @@ export const SmartValidationAndComponentLibraryView: React.FC<Props> = ({
           | 'L3'
           | 'L1,L2,L3',
         cable:
-          product.poles === '3P'
+          product.poles === '3P' || product.poles === '4P'
             ? 'CYKY-J 5x2,5 mm²'
-            : product.ratedCurrent <= 10
+            : isBell || product.ratedCurrent <= 10
             ? 'CYKY-J 3x1,5 mm²'
             : 'CYKY-J 3x2,5 mm²',
-        cableLengthM: 18,
-        powerKw: product.poles === '3P' ? 5.5 : product.ratedCurrent <= 10 ? 0.6 : 2.2,
+        cableLengthM: isBell ? 12 : 18,
+        powerKw: isBell ? 0.02 : product.poles === '3P' ? 5.5 : product.ratedCurrent <= 10 ? 0.6 : 2.2,
         manufacturer: product.manufacturer,
         model: product.model,
         catalogNumber: product.catalogNumber,
@@ -620,6 +625,7 @@ export const SmartValidationAndComponentLibraryView: React.FC<Props> = ({
               <option value="Hlavný vypínač">Hlavné vypínače (IS / SBN)</option>
               <option value="SPD (Prepäťová ochrana)">SPD (Zvodiče prepätia)</option>
               <option value="AFDD (Oblúková ochrana)">AFDD (Oblúkové ochrany)</option>
+              <option value="Modulárny zvonček 230 V">Zvonček 230 V (modulárny na DIN)</option>
             </select>
           </div>
         </div>

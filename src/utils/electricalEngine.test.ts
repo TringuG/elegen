@@ -492,3 +492,68 @@ test('browser memory nameplate persistence saves and loads last nameplate and pr
   assert.equal(loadLastNameplateFromBrowserMemory(), null);
   delete (globalThis as any).localStorage;
 });
+
+test('1-phase system supports 3-phase (3P B16) circuit and Zvonček 230 V element in DIN rail and BOM', async () => {
+  const { isDoorbellCircuit, suggestDoorbellModel, suggestMainBreakerModel } = await import('./electricalEngine');
+
+  const base1f = PROJECT_TEMPLATES.byt_1f_230v;
+  const mfg = base1f.mainBreaker.manufacturer;
+  const projectWith3PAndBell = {
+    ...base1f,
+    circuits: [
+      ...base1f.circuits,
+      {
+        id: 'c-3f-in-1f',
+        label: 'FA9',
+        name: 'Varná doska (3F istič B16)',
+        category: 'Kuchyňa / Spotrebiče' as const,
+        characteristic: 'B' as const,
+        ratedCurrent: 16 as const,
+        poles: '3P' as const,
+        breakingCapacity: '10 kA' as const,
+        cable: 'CYKY-J 5x2,5 mm²',
+        lengthM: 12,
+        powerKw: 3.6,
+        phase: 'L1,L2,L3' as const,
+        rcdId: base1f.rcds[0]?.id || 'NONE',
+        manufacturer: mfg,
+        model: suggestMainBreakerModel(mfg, '3P', 'B', 16, '10 kA'),
+      },
+      {
+        id: 'c-bell-230v',
+        label: 'FA10',
+        name: 'Zvonček 230 V (modulárny na DIN lištu)',
+        category: 'Osvetlenie' as const,
+        characteristic: 'B' as const,
+        ratedCurrent: 6 as const,
+        poles: '1P' as const,
+        breakingCapacity: '10 kA' as const,
+        cable: 'CYKY-J 3x1,5 mm²',
+        lengthM: 10,
+        powerKw: 0.05,
+        phase: 'L1' as const,
+        rcdId: base1f.rcds[0]?.id || 'NONE',
+        manufacturer: mfg,
+        model: suggestMainBreakerModel(mfg, '1P', 'B', 6, '10 kA'),
+        note: `Modulárny zvonček 230 V AC (1M) • ${suggestDoorbellModel(mfg).model}`,
+      },
+    ],
+  };
+
+  assert.equal(isDoorbellCircuit(projectWith3PAndBell.circuits[projectWith3PAndBell.circuits.length - 1]), true);
+
+  const balanced = balanceCircuitPhases(projectWith3PAndBell);
+  const c3f = balanced.circuits.find((c) => c.id === 'c-3f-in-1f')!;
+  assert.equal(c3f.poles, '3P');
+  assert.equal(c3f.phase, 'L1,L2,L3');
+
+  const din = calculateDinRailAllocation(balanced);
+  const allDinItems = din.rows.flat();
+  assert.ok(allDinItems.some((item) => item.label === 'FA9' && item.modules === 3));
+  assert.ok(allDinItems.some((item) => item.label === 'ZV1' && item.ratingText === '230 V AC' && item.modules === 1));
+
+  const bom = generateBom(balanced);
+  assert.ok(bom.some((item) => item.category.includes('Zvonček 230 V') && item.designation.includes('Modulárny zvonček 230 V')));
+  assert.ok(bom.some((item) => item.description.includes('3P') && item.description.includes('16 A')));
+});
+

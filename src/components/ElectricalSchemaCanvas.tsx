@@ -8,6 +8,7 @@ import {
   MainBreakerCurrent,
   BreakerCharacteristic,
   PhaseAllocation,
+  PolesType,
   InternalMainDeviceType,
   InternalMainDeviceCurrent,
 } from '../types/electrical';
@@ -18,6 +19,7 @@ import {
   getEffectiveElectricityMeter,
   getEffectiveInternalDevice,
   suggestInternalMainDeviceModel,
+  isDoorbellCircuit,
   INTERNAL_DEVICE_TYPES,
   INTERNAL_DEVICE_CURRENTS,
 } from '../utils/electricalEngine';
@@ -35,6 +37,7 @@ import {
   GitCommit,
   Cable,
   Plus,
+  Bell,
   Trash2,
   ArrowLeft,
   ArrowRight,
@@ -440,6 +443,68 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
     setSelectedElement({ type: 'circuit', id: newCircuit.id });
   };
 
+  const handleAddQuick3PhaseCircuit = () => {
+    if (!onProjectChange) return;
+    const nextIdx = circuits.length + 1;
+    const defaultRcd = rcds.find((r) => r.deviceKind === 'RCCB')?.id ?? 'NONE';
+    const mfg = mainBreaker.manufacturer;
+    const newCircuit: CircuitConfig = {
+      id: `circ-3p-${Date.now()}`,
+      label: `FA${nextIdx}`,
+      name: `3F okruh / Varná doska č. ${nextIdx}`,
+      category: 'Kuchyňa / Spotrebiče',
+      poles: '3P',
+      ratedCurrent: 16,
+      characteristic: 'B',
+      breakingCapacity: '10 kA',
+      rcdId: defaultRcd,
+      cable: 'CYKY-J 5x2,5 mm²',
+      powerKw: 5.5,
+      phase: 'L1,L2,L3',
+      cableLengthM: 15,
+      installationMethod: 'B1 (v inštalačnej rúre v stene)',
+      cosPhi: 0.95,
+      manufacturer: mfg,
+      model: suggestCircuitBreakerModel(mfg, '3P', 'B', 16),
+    };
+    onProjectChange(
+      { ...project, circuits: [...circuits, newCircuit] },
+      `Pridaný 3-fázový istič B16 (3P) ${newCircuit.label} v editore schémy`
+    );
+    setSelectedElement({ type: 'circuit', id: newCircuit.id });
+  };
+
+  const handleAddQuickDoorbell = () => {
+    if (!onProjectChange) return;
+    const nextIdx = circuits.length + 1;
+    const defaultRcd = rcds.find((r) => r.deviceKind === 'RCCB')?.id ?? 'NONE';
+    const mfg = mainBreaker.manufacturer;
+    const newCircuit: CircuitConfig = {
+      id: `circ-bell-${Date.now()}`,
+      label: `FA${nextIdx}`,
+      name: 'Zvonček 230 V (modulárny na DIN)',
+      category: 'Osvetlenie',
+      poles: '1P',
+      ratedCurrent: 6,
+      characteristic: 'B',
+      breakingCapacity: '10 kA',
+      rcdId: defaultRcd,
+      cable: 'CYKY-J 3x1,5 mm²',
+      powerKw: 0.02,
+      phase: 'L1',
+      cableLengthM: 12,
+      installationMethod: 'B1 (v inštalačnej rúre v stene)',
+      cosPhi: 0.95,
+      manufacturer: mfg,
+      model: suggestCircuitBreakerModel(mfg, '1P', 'B', 6),
+    };
+    onProjectChange(
+      { ...project, circuits: [...circuits, newCircuit] },
+      `Pridaný prvok Zvonček 230 V (${newCircuit.label}) v editore schémy`
+    );
+    setSelectedElement({ type: 'circuit', id: newCircuit.id });
+  };
+
   const handleAddQuickRcd = () => {
     if (!onProjectChange) return;
     const nextIdx = rcds.length + 1;
@@ -626,10 +691,28 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   type="button"
                   onClick={handleAddQuickCircuit}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                  title="Pridať nový vývodový okruh priamo do schémy"
+                  title="Pridať nový 1-fázový vývodový okruh priamo do schémy"
                 >
                   <Plus className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
                   <span>+ Okruh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddQuick3PhaseCircuit}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  title="Pridať 3-fázový istič (napr. B16 3P) aj do 1-fázovej alebo 3-fázovej sústavy"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>+ 3F Istič (B16)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddQuickDoorbell}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1E293B] hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  title="Pridať modulárny Zvonček 230 V (s ističom B6A) do schémy"
+                >
+                  <Bell className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>+ Zvonček 230V</span>
                 </button>
                 <button
                   type="button"
@@ -919,6 +1002,51 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                 className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white w-44"
               />
               <select
+                value={selectedCircuit.poles}
+                onChange={(e) => {
+                  const nextPoles = e.target.value as PolesType;
+                  const nextPhase: PhaseAllocation =
+                    nextPoles === '3P' || nextPoles === '4P'
+                      ? 'L1,L2,L3'
+                      : selectedCircuit.phase === 'L1,L2,L3'
+                      ? 'L1'
+                      : selectedCircuit.phase;
+                  const nextCable =
+                    nextPoles === '3P' || nextPoles === '4P'
+                      ? selectedCircuit.cable.replace('3x', '5x')
+                      : selectedCircuit.cable.replace('5x', '3x');
+                  onProjectChange(
+                    {
+                      ...project,
+                      circuits: circuits.map((c) =>
+                        c.id === selectedCircuit.id
+                          ? {
+                              ...c,
+                              poles: nextPoles,
+                              phase: nextPhase,
+                              cable: nextCable,
+                              model: suggestCircuitBreakerModel(
+                                c.manufacturer,
+                                nextPoles,
+                                c.characteristic,
+                                c.ratedCurrent
+                              ),
+                            }
+                          : c
+                      ),
+                    },
+                    `Zmena počtu pólov ${selectedCircuit.label} na ${nextPoles}`
+                  );
+                }}
+                className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-white font-mono"
+                title="Počet pólov ističa (1P, 2P, 3P, 4P)"
+              >
+                <option value="1P">1P</option>
+                <option value="2P">2P</option>
+                <option value="3P">3P (3F)</option>
+                <option value="4P">4P (3F+N)</option>
+              </select>
+              <select
                 value={selectedCircuit.characteristic}
                 onChange={(e) =>
                   onProjectChange(
@@ -926,7 +1054,16 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                       ...project,
                       circuits: circuits.map((c) =>
                         c.id === selectedCircuit.id
-                          ? { ...c, characteristic: e.target.value as BreakerCharacteristic }
+                          ? {
+                              ...c,
+                              characteristic: e.target.value as BreakerCharacteristic,
+                              model: suggestCircuitBreakerModel(
+                                c.manufacturer,
+                                c.poles,
+                                e.target.value as BreakerCharacteristic,
+                                c.ratedCurrent
+                              ),
+                            }
                           : c
                       ),
                     },
@@ -943,7 +1080,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               </select>
               <select
                 value={selectedCircuit.ratedCurrent}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const nextAmp = Number(e.target.value) as CircuitConfig['ratedCurrent'];
                   onProjectChange(
                     {
                       ...project,
@@ -951,16 +1089,20 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         c.id === selectedCircuit.id
                           ? {
                               ...c,
-                              ratedCurrent: Number(
-                                e.target.value
-                              ) as CircuitConfig['ratedCurrent'],
+                              ratedCurrent: nextAmp,
+                              model: suggestCircuitBreakerModel(
+                                c.manufacturer,
+                                c.poles,
+                                c.characteristic,
+                                nextAmp
+                              ),
                             }
                           : c
                       ),
                     },
                     `Zmena prúdu ${selectedCircuit.label}`
-                  )
-                }
+                  );
+                }}
                 className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-white font-mono"
               >
                 {[6, 10, 13, 16, 20, 25, 32, 40, 50, 63].map((amp) => (
@@ -971,25 +1113,48 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
               </select>
               <select
                 value={selectedCircuit.phase}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const nextPhase = e.target.value as PhaseAllocation;
+                  const nextPoles: PolesType =
+                    nextPhase === 'L1,L2,L3' && selectedCircuit.poles === '1P'
+                      ? '3P'
+                      : nextPhase !== 'L1,L2,L3' &&
+                        (selectedCircuit.poles === '3P' || selectedCircuit.poles === '4P')
+                      ? '1P'
+                      : selectedCircuit.poles;
+                  const nextCable =
+                    nextPoles === '3P' || nextPoles === '4P'
+                      ? selectedCircuit.cable.replace('3x', '5x')
+                      : selectedCircuit.cable.replace('5x', '3x');
                   onProjectChange(
                     {
                       ...project,
                       circuits: circuits.map((c) =>
                         c.id === selectedCircuit.id
-                          ? { ...c, phase: e.target.value as PhaseAllocation }
+                          ? {
+                              ...c,
+                              phase: nextPhase,
+                              poles: nextPoles,
+                              cable: nextCable,
+                              model: suggestCircuitBreakerModel(
+                                c.manufacturer,
+                                nextPoles,
+                                c.characteristic,
+                                c.ratedCurrent
+                              ),
+                            }
                           : c
                       ),
                     },
                     `Zmena fázy ${selectedCircuit.label}`
-                  )
-                }
+                  );
+                }}
                 className="bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-white font-mono"
               >
                 <option value="L1">L1</option>
-                {isThreePhase && <option value="L2">L2</option>}
-                {isThreePhase && <option value="L3">L3</option>}
-                {isThreePhase && <option value="L1,L2,L3">L1,L2,L3</option>}
+                <option value="L2">L2</option>
+                <option value="L3">L3</option>
+                <option value="L1,L2,L3">L1,L2,L3 (3F)</option>
               </select>
               <select
                 value={selectedCircuit.rcdId}
@@ -2104,7 +2269,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                                 />
                                 <circle cx={phaseTapX} cy={cy} r={3.6} fill="#000000" />
                               </>
-                            ) : (
+                            ) : isThreePhase ? (
                               <>
                                 <line
                                   x1={hasParentRcd ? subBusL1X : mainBusL1X}
@@ -2148,6 +2313,42 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                                   r={3}
                                   fill="#000000"
                                 />
+                              </>
+                            ) : (
+                              <>
+                                <line
+                                  x1={hasParentRcd ? subBusL1X : mainBusL1X}
+                                  y1={cy}
+                                  x2={mcbLeftX - 10}
+                                  y2={cy}
+                                  stroke="#000000"
+                                  strokeWidth={2}
+                                />
+                                <circle
+                                  cx={hasParentRcd ? subBusL1X : mainBusL1X}
+                                  cy={cy}
+                                  r={3.2}
+                                  fill="#000000"
+                                />
+                                <line
+                                  x1={mcbLeftX - 10}
+                                  y1={cy - 5}
+                                  x2={mcbLeftX - 10}
+                                  y2={cy + 5}
+                                  stroke="#000000"
+                                  strokeWidth={1.7}
+                                />
+                                {[-5, 0, 5].map((yOff) => (
+                                  <line
+                                    key={`1f-3p-split-${c.id}-${yOff}`}
+                                    x1={mcbLeftX - 10}
+                                    y1={cy + yOff}
+                                    x2={mcbLeftX}
+                                    y2={cy + yOff}
+                                    stroke="#000000"
+                                    strokeWidth={1.6}
+                                  />
+                                ))}
                               </>
                             )}
 
@@ -2468,6 +2669,36 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                             >
                               P = {c.powerKw.toFixed(2)} kW
                             </text>
+                            {isDoorbellCircuit(c) && (
+                              <g transform={`translate(${loadEndX - 108}, ${cy - (isCompactRow ? 14 : 17)})`}>
+                                <rect
+                                  x={0}
+                                  y={0}
+                                  width={96}
+                                  height={isCompactRow ? 14 : 16}
+                                  rx={3}
+                                  fill="#ECFDF5"
+                                  stroke="#059669"
+                                  strokeWidth={1.2}
+                                />
+                                <path
+                                  d="M 10 11 A 4 4 0 0 1 18 11 Z"
+                                  fill="#059669"
+                                />
+                                <circle cx={14} cy={12.5} r={1.2} fill="#059669" />
+                                <text
+                                  x={54}
+                                  y={isCompactRow ? 10.5 : 11.5}
+                                  textAnchor="middle"
+                                  fill="#065F46"
+                                  fontSize={isCompactRow ? 8.5 : 9.2}
+                                  fontWeight="bold"
+                                  fontFamily="JetBrains Mono, monospace"
+                                >
+                                  ZVONČEK 230V
+                                </text>
+                              </g>
+                            )}
                           </g>
                         );
                       };
@@ -3262,10 +3493,8 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                         fontWeight="bold"
                         fontFamily="Inter, Plus Jakarta Sans, sans-serif"
                       >
-                        Vypracoval:{' '}
-                        {(project.designerName || 'Projekčná kancelária').length > 48
-                          ? `${(project.designerName || 'Projekčná kancelária').slice(0, 48)}…`
-                          : project.designerName || 'Projekčná kancelária'}
+                        Krytie: {project.ipRating} • Montáž: {project.enclosureMounting} • Prívod:{' '}
+                        {project.supplyCable}
                       </text>
                       <text
                         x={624}
@@ -4095,10 +4324,7 @@ export const ElectricalSchemaCanvas: React.FC<Props> = ({
                   </text>
 
                   <text x={10} y={41} fill="#0F172A" fontSize={11} fontWeight="bold" fontFamily="Inter, Plus Jakarta Sans, sans-serif">
-                    Vypracoval:{' '}
-                    {(project.designerName || 'Projekčná kancelária').length > 30
-                      ? `${(project.designerName || 'Projekčná kancelária').slice(0, 30)}…`
-                      : project.designerName || 'Projekčná kancelária'}
+                    Krytie: {project.ipRating} • Prívod: {project.supplyCable}
                   </text>
                   <text x={315} y={41} fill="#0F172A" fontSize={11} fontWeight="bold" fontFamily="JetBrains Mono, monospace">
                     Dátum: {project.projectDate}
